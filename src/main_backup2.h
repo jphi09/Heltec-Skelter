@@ -97,7 +97,7 @@ inline void HTITTracker::begin() {
     Serial.begin(115200);
     while (!Serial) { delay(10); }
     Serial.println();
-    Serial.println("HTIT-Tracker v1.2: 5-Row Display with Home Navigation");
+    Serial.println("HTIT-Tracker v1.2: 4-Row Display (Fix, Sats, Batt%, Acc)");
 
     // 2) Configure VBAT_EN (GPIO 2) and keep LOW until measurement
     pinMode(VBAT_EN, OUTPUT);
@@ -172,7 +172,7 @@ inline void HTITTracker::update() {
             Serial.print("    Batt% = "); Serial.print(pct_cal); Serial.println(" %");
         }
 
-        // 5) Draw five rows on the ST7735
+        // 5) Draw four rows on the ST7735
         updateLCD(pct_cal);
     }
 }
@@ -352,6 +352,7 @@ inline int HTITTracker::voltageToPercent(float vb) {
         return (int)roundf((vb - 3.30f)/(3.50f - 3.30f)*5.0f);          // 0-5%
     }
     return 0;  // Battery critically low or disconnected
+}
 }
 
 // Home navigation helper methods implementation

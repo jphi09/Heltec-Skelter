@@ -7,8 +7,58 @@
 // PIN DEFINITIONS
 #define VGNSS_CTRL   3    // GPIO 3 → Vext (active-low) powers UC6580 + ST7735
 #define GPS_RX_PIN  33    // UC6580 TX → ESP32 RX
-#define GPS_TX_PIN  34    // UC6580 RX ← ESP32 TX
-#define VBAT_PIN     A0   // ADC1_CH0 on GPIO 1 (junction of 100 Ω/390 Ω divider)
+#define GPS_TX_PIN  34    // UC6580 RX ← ESP32inline float HTITTracker::parseGGAHDOP(const char* ggaLine) {
+    // Extract 9th field (<HDOP>) from "$GNGGA"
+    int commaCount = 0;
+    const char* p = ggaLine;
+    while (*p && commaCount < 8) {
+        if (*p == ',') commaCount++;
+        p++;
+    }
+    if (!*p || *p == ',') return -1.0f;
+    return atof(p);
+}
+
+inline bool HTITTracker::parseGGAPosition(const char* ggaLine, double &lat, double &lon) {
+    // Parse $GNGGA format: $GNGGA,time,lat,N/S,lon,E/W,fix,sats,hdop,alt,M,geoid,M,dgps_age,dgps_id*checksum
+    // Fields: 0=GNGGA, 1=time, 2=lat, 3=N/S, 4=lon, 5=E/W, 6=fix_quality
+    
+    const char* fields[15];
+    int fieldCount = 0;
+    const char* start = ggaLine;
+    
+    // Split the line by commas
+    for (const char* p = ggaLine; *p && fieldCount < 15; p++) {
+        if (*p == ',' || *p == '*') {
+            fields[fieldCount++] = start;
+            start = p + 1;
+        }
+    }
+    
+    if (fieldCount < 6) return false;
+    
+    // Parse latitude (field 2, format: ddmm.mmmmm)
+    const char* latStr = fields[2];
+    const char* latDir = fields[3];
+    if (strlen(latStr) < 7 || strlen(latDir) < 1) return false;
+    
+    double latDeg = (latStr[0] - '0') * 10 + (latStr[1] - '0');
+    double latMin = atof(latStr + 2);
+    lat = latDeg + latMin / 60.0;
+    if (latDir[0] == 'S') lat = -lat;
+    
+    // Parse longitude (field 4, format: dddmm.mmmmm)
+    const char* lonStr = fields[4];
+    const char* lonDir = fields[5];
+    if (strlen(lonStr) < 8 || strlen(lonDir) < 1) return false;
+    
+    double lonDeg = (lonStr[0] - '0') * 100 + (lonStr[1] - '0') * 10 + (lonStr[2] - '0');
+    double lonMin = atof(lonStr + 3);
+    lon = lonDeg + lonMin / 60.0;
+    if (lonDir[0] == 'W') lon = -lon;
+    
+    return true;
+}e VBAT_PIN     A0   // ADC1_CH0 on GPIO 1 (junction of 100 Ω/390 Ω divider)
 #define VBAT_EN       2   // GPIO 2 must be HIGH to connect that divider
 #define BL_CTRL_PIN  21   // GPIO 21 enables ST7735 backlight (HIGH = on)
 
@@ -35,6 +85,20 @@ private:
     double currentLat, currentLon;     // Current coordinates
     bool hasValidPosition;             // Current position is valid
     
+    // Movement tracking for direction calculation
+    struct PositionHistory {
+        double lat, lon;
+        unsigned long timestamp;
+        bool valid;
+    };
+    static const int HISTORY_SIZE = 5;
+    PositionHistory posHistory[HISTORY_SIZE];
+    int historyIndex;
+    
+    // Current heading (0-359 degrees, 0=North)
+    float currentHeading;
+    bool hasValidHeading;
+    
     // Buffer for NMEA line accumulation
     char lineBuf[128];
     int linePos;
@@ -54,9 +118,10 @@ private:
     void updateLCD(int pct_cal);
     
     // Home navigation helper methods
+    void updatePositionHistory(double lat, double lon);
+    void calculateHeadingFromMovement();
     float calculateBearingToHome();
-    float calculateDistanceToHome();
-    const char* getCardinalDirection(float bearingToHome);
+    char getDirectionArrow(float bearingToHome);
 
 public:
     // Constructor
@@ -79,6 +144,7 @@ public:
     // Home navigation getters
     bool isHomeEstablished() const { return homeEstablished; }
     bool hasCurrentPosition() const { return hasValidPosition; }
+    float getCurrentHeading() const { return currentHeading; }
 };
 
 // Implementation of HTITTracker class methods
@@ -88,8 +154,16 @@ inline HTITTracker::HTITTracker()
       qzssCount(0), totalInView(0), haveFix(false), lastHDOP(99.99f),
       linePos(0), lastLCDupdate(0), homeEstablished(false),
       homeLat(0.0), homeLon(0.0), currentLat(0.0), currentLon(0.0),
-      hasValidPosition(false) {
+      hasValidPosition(false), historyIndex(0), currentHeading(0.0f),
+      hasValidHeading(false) {
     memset(lineBuf, 0, sizeof(lineBuf));
+    // Initialize position history
+    for (int i = 0; i < HISTORY_SIZE; i++) {
+        posHistory[i].valid = false;
+        posHistory[i].lat = 0.0;
+        posHistory[i].lon = 0.0;
+        posHistory[i].timestamp = 0;
+    }
 }
 
 inline void HTITTracker::begin() {
@@ -97,7 +171,7 @@ inline void HTITTracker::begin() {
     Serial.begin(115200);
     while (!Serial) { delay(10); }
     Serial.println();
-    Serial.println("HTIT-Tracker v1.2: 5-Row Display with Home Navigation");
+    Serial.println("HTIT-Tracker v1.2: 4-Row Display (Fix, Sats, Batt%, Acc)");
 
     // 2) Configure VBAT_EN (GPIO 2) and keep LOW until measurement
     pinMode(VBAT_EN, OUTPUT);
@@ -172,7 +246,7 @@ inline void HTITTracker::update() {
             Serial.print("    Batt% = "); Serial.print(pct_cal); Serial.println(" %");
         }
 
-        // 5) Draw five rows on the ST7735
+        // 5) Draw four rows on the ST7735
         updateLCD(pct_cal);
     }
 }
@@ -210,6 +284,12 @@ inline void HTITTracker::processNMEALine(const char* line) {
             currentLat = lat;
             currentLon = lon;
             hasValidPosition = true;
+            
+            // Update position history for movement tracking
+            updatePositionHistory(lat, lon);
+            
+            // Calculate heading from movement
+            calculateHeadingFromMovement();
             
             // Establish home if we have a fix and haven't set home yet
             if (haveFix && !homeEstablished) {
@@ -252,52 +332,11 @@ inline float HTITTracker::parseGGAHDOP(const char* ggaLine) {
     int commaCount = 0;
     const char* p = ggaLine;
     while (*p && commaCount < 8) {
-        if (*p == ',') commaCount++;
+        if (*p == ',') p++;
         p++;
     }
     if (!*p || *p == ',') return -1.0f;
     return atof(p);
-}
-
-inline bool HTITTracker::parseGGAPosition(const char* ggaLine, double &lat, double &lon) {
-    // Parse $GNGGA format: $GNGGA,time,lat,N/S,lon,E/W,fix,sats,hdop,alt,M,geoid,M,dgps_age,dgps_id*checksum
-    // Fields: 0=GNGGA, 1=time, 2=lat, 3=N/S, 4=lon, 5=E/W, 6=fix_quality
-    
-    const char* fields[15];
-    int fieldCount = 0;
-    const char* start = ggaLine;
-    
-    // Split the line by commas
-    for (const char* p = ggaLine; *p && fieldCount < 15; p++) {
-        if (*p == ',' || *p == '*') {
-            fields[fieldCount++] = start;
-            start = p + 1;
-        }
-    }
-    
-    if (fieldCount < 6) return false;
-    
-    // Parse latitude (field 2, format: ddmm.mmmmm)
-    const char* latStr = fields[2];
-    const char* latDir = fields[3];
-    if (strlen(latStr) < 7 || strlen(latDir) < 1) return false;
-    
-    double latDeg = (latStr[0] - '0') * 10 + (latStr[1] - '0');
-    double latMin = atof(latStr + 2);
-    lat = latDeg + latMin / 60.0;
-    if (latDir[0] == 'S') lat = -lat;
-    
-    // Parse longitude (field 4, format: dddmm.mmmmm)
-    const char* lonStr = fields[4];
-    const char* lonDir = fields[5];
-    if (strlen(lonStr) < 8 || strlen(lonDir) < 1) return false;
-    
-    double lonDeg = (lonStr[0] - '0') * 100 + (lonStr[1] - '0') * 10 + (lonStr[2] - '0');
-    double lonMin = atof(lonStr + 3);
-    lon = lonDeg + lonMin / 60.0;
-    if (lonDir[0] == 'W') lon = -lon;
-    
-    return true;
 }
 
 inline float HTITTracker::readBatteryVoltageRaw(int &rawADC) {
@@ -321,161 +360,67 @@ inline float HTITTracker::readBatteryVoltageRaw(int &rawADC) {
 }
 
 inline int HTITTracker::voltageToPercent(float vb) {
-    // Accurate lithium battery discharge curve for 3.7V 3000mAh battery
-    // Based on typical 18650 lithium-ion discharge characteristics
-    
+    // Map VBAT (3.00–4.20 V) → 0–100 % by linear interpolation
     if (vb >= 4.20f) {
-        return 100;  // Fully charged
+        return 100;
     } 
-    else if (vb >= 4.10f) {
-        return (int)roundf(95.0f + (vb - 4.10f)/(4.20f - 4.10f)*5.0f);  // 95-100%
+    else if (vb >= 4.06f) {
+        return (int)roundf(90.0f + (vb - 4.06f)/(4.20f - 4.06f)*10.0f);
     }
-    else if (vb >= 4.00f) {
-        return (int)roundf(85.0f + (vb - 4.00f)/(4.10f - 4.00f)*10.0f); // 85-95%
+    else if (vb >= 3.98f) {
+        return (int)roundf(80.0f + (vb - 3.98f)/(4.06f - 3.98f)*10.0f);
     }
-    else if (vb >= 3.90f) {
-        return (int)roundf(70.0f + (vb - 3.90f)/(4.00f - 3.90f)*15.0f); // 70-85%
+    else if (vb >= 3.92f) {
+        return (int)roundf(70.0f + (vb - 3.92f)/(3.98f - 3.92f)*10.0f);
     }
-    else if (vb >= 3.80f) {
-        return (int)roundf(50.0f + (vb - 3.80f)/(3.90f - 3.80f)*20.0f); // 50-70%
+    else if (vb >= 3.87f) {
+        return (int)roundf(60.0f + (vb - 3.87f)/(3.92f - 3.87f)*10.0f);
     }
-    else if (vb >= 3.70f) {
-        return (int)roundf(30.0f + (vb - 3.70f)/(3.80f - 3.70f)*20.0f); // 30-50%
+    else if (vb >= 3.82f) {
+        return (int)roundf(50.0f + (vb - 3.82f)/(3.87f - 3.82f)*10.0f);
     }
-    else if (vb >= 3.60f) {
-        return (int)roundf(15.0f + (vb - 3.60f)/(3.70f - 3.60f)*15.0f); // 15-30%
+    else if (vb >= 3.79f) {
+        return (int)roundf(40.0f + (vb - 3.79f)/(3.82f - 3.79f)*10.0f);
     }
-    else if (vb >= 3.50f) {
-        return (int)roundf(5.0f + (vb - 3.50f)/(3.60f - 3.50f)*10.0f);  // 5-15%
+    else if (vb >= 3.77f) {
+        return (int)roundf(30.0f + (vb - 3.77f)/(3.79f - 3.77f)*10.0f);
+    }
+    else if (vb >= 3.74f) {
+        return (int)roundf(20.0f + (vb - 3.74f)/(3.77f - 3.74f)*10.0f);
+    }
+    else if (vb >= 3.71f) {
+        return (int)roundf(10.0f + (vb - 3.71f)/(3.74f - 3.71f)*10.0f);
     }
     else if (vb >= 3.30f) {
-        return (int)roundf((vb - 3.30f)/(3.50f - 3.30f)*5.0f);          // 0-5%
+        return (int)roundf((vb - 3.30f)/(3.71f - 3.30f)*10.0f);
     }
-    return 0;  // Battery critically low or disconnected
-}
-
-// Home navigation helper methods implementation
-inline float HTITTracker::calculateBearingToHome() {
-    if (!homeEstablished || !hasValidPosition) {
-        return 0.0f;  // Default to North
-    }
-    
-    // Calculate bearing from current position to home
-    double lat1 = currentLat * PI / 180.0;
-    double lon1 = currentLon * PI / 180.0;
-    double lat2 = homeLat * PI / 180.0;
-    double lon2 = homeLon * PI / 180.0;
-    
-    double dLon = lon2 - lon1;
-    
-    double y = sin(dLon) * cos(lat2);
-    double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
-    
-    double bearing = atan2(y, x) * 180.0 / PI;
-    bearing = fmod(bearing + 360.0, 360.0);  // Normalize to 0-360
-    
-    return bearing;
-}
-
-inline float HTITTracker::calculateDistanceToHome() {
-    if (!homeEstablished || !hasValidPosition) {
-        return 0.0f;  // No distance if no home or position
-    }
-    
-    // Calculate distance using Haversine formula
-    double lat1 = currentLat * PI / 180.0;
-    double lon1 = currentLon * PI / 180.0;
-    double lat2 = homeLat * PI / 180.0;
-    double lon2 = homeLon * PI / 180.0;
-    
-    double dLat = lat2 - lat1;
-    double dLon = lon2 - lon1;
-    
-    double a = sin(dLat/2) * sin(dLat/2) + 
-               cos(lat1) * cos(lat2) * 
-               sin(dLon/2) * sin(dLon/2);
-    double c = 2 * atan2(sqrt(a), sqrt(1-a));
-    
-    // Earth's radius in meters
-    const double EARTH_RADIUS = 6371000.0;
-    
-    return EARTH_RADIUS * c;  // Distance in meters
-}
-
-inline const char* HTITTracker::getCardinalDirection(float bearingToHome) {
-    if (!haveFix) {
-        return "O";  // Show "O" when no GPS fix yet
-    }
-    
-    if (!homeEstablished) {
-        return "N";  // Point North when no home established but have fix
-    }
-    
-    // Convert bearing to 8 cardinal directions
-    if (bearingToHome >= 337.5 || bearingToHome < 22.5) {
-        return "N";   // North
-    } else if (bearingToHome >= 22.5 && bearingToHome < 67.5) {
-        return "NE";  // Northeast
-    } else if (bearingToHome >= 67.5 && bearingToHome < 112.5) {
-        return "E";   // East
-    } else if (bearingToHome >= 112.5 && bearingToHome < 157.5) {
-        return "SE";  // Southeast
-    } else if (bearingToHome >= 157.5 && bearingToHome < 202.5) {
-        return "S";   // South
-    } else if (bearingToHome >= 202.5 && bearingToHome < 247.5) {
-        return "SW";  // Southwest
-    } else if (bearingToHome >= 247.5 && bearingToHome < 292.5) {
-        return "W";   // West
-    } else {
-        return "NW";  // Northwest
-    }
+    return 0;
 }
 
 inline void HTITTracker::updateLCD(int pct_cal) {
     // 1) Clear entire screen
     st7735.st7735_fill_screen(ST7735_BLACK);
 
-    // 2) Row 0 (y=0): Fix status (8 chars) + Cardinal direction (4 chars)
+    // 2) Row 0 (y=0): Fix status (12 chars)
     char fixBuf[16];
     if (haveFix) {
-        sprintf(fixBuf, "Fix: Yes ");
+        sprintf(fixBuf, "Fix: Yes    ");
     } else {
-        sprintf(fixBuf, "Fix: No  ");
+        sprintf(fixBuf, "Fix: No     ");
     }
-    
-    // Calculate bearing to home and get cardinal direction
-    float bearingToHome = calculateBearingToHome();
-    const char* direction = getCardinalDirection(bearingToHome);
-    
-    // Add direction to display string
-    sprintf(fixBuf + 9, "%s", direction);
     st7735.st7735_write_str(0, 0, String(fixBuf));
 
-    // 3) Row 1 (y=16): Distance to home in meters
-    char distBuf[16];
-    if (homeEstablished && hasValidPosition) {
-        float distanceToHome = calculateDistanceToHome();
-        if (distanceToHome < 1000) {
-            sprintf(distBuf, "Home:%3.0fm   ", distanceToHome);
-        } else {
-            sprintf(distBuf, "Home:%3.1fkm  ", distanceToHome / 1000.0);
-        }
-    } else {
-        sprintf(distBuf, "Home: --.-m   ");
-    }
-    st7735.st7735_write_str(0, 16, String(distBuf));
-
-    // 4) Row 2 (y=32): Satellite count (12 chars)
+    // 3) Row 1 (y=16): Satellite count (12 chars)
     char satBuf[16];
     sprintf(satBuf, "Sats:%3d    ", totalInView);
-    st7735.st7735_write_str(0, 32, String(satBuf));
+    st7735.st7735_write_str(0, 16, String(satBuf));
 
-    // 5) Row 3 (y=48): Battery percentage (12 chars)
+    // 4) Row 2 (y=32): Battery percentage (12 chars)
     char battBuf[16];
     sprintf(battBuf, "Batt:%3d%%    ", pct_cal);
-    st7735.st7735_write_str(0, 48, String(battBuf));
+    st7735.st7735_write_str(0, 32, String(battBuf));
 
-    // 6) Row 4 (y=64): Fix accuracy in meters (12 chars)
+    // 5) Row 3 (y=48): Fix accuracy in meters (12 chars)
     float accuracy = lastHDOP * 5.0f;  // HDOP × 5 m
     char accBuf[16];
     if (haveFix && lastHDOP > 0.0f && lastHDOP < 100.0f) {
@@ -483,7 +428,7 @@ inline void HTITTracker::updateLCD(int pct_cal) {
     } else {
         sprintf(accBuf, "Acc: --.-m   ");
     }
-    st7735.st7735_write_str(0, 64, String(accBuf));
+    st7735.st7735_write_str(0, 48, String(accBuf));
 }
 
 #endif // MAIN_H
