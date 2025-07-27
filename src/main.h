@@ -47,6 +47,14 @@ private:
     float currentSpeed;                // Current speed in km/h
     bool hasValidSpeed;                // Speed calculation valid
     
+    // Battery monitoring improvements
+    float batteryReadings[5];          // Rolling buffer for battery percentage
+    int batteryIndex;                  // Current index in rolling buffer
+    bool batteryBufferFull;            // Whether we have 5 readings yet
+    float lastBatteryVoltage;          // Previous voltage reading for charging detection
+    bool isCharging;                   // Whether battery is currently charging
+    unsigned long lastChargingCheck;   // Time of last charging check
+    
     // Previous display state for flicker-free updates
     char prevFixBuf[16];
     char prevDistBuf[16]; 
@@ -77,6 +85,8 @@ private:
     void updateNavigationScreen(int pct_cal);
     void checkButton();
     void calculateSpeed();
+    int getStableBatteryPercent(float voltage);
+    void updateChargingStatus(float voltage);
     
     // Home navigation helper methods
     float calculateBearingToHome();
@@ -115,7 +125,9 @@ inline HTITTracker::HTITTracker()
       homeLat(0.0), homeLon(0.0), currentLat(0.0), currentLon(0.0),
       hasValidPosition(false), currentScreen(false), buttonPressed(false),
       lastButtonPress(0), lastLat(0.0), lastLon(0.0), lastSpeedTime(0),
-      currentSpeed(0.0f), hasValidSpeed(false), prevDisplayValid(false) {
+      currentSpeed(0.0f), hasValidSpeed(false), prevDisplayValid(false),
+      batteryIndex(0), batteryBufferFull(false), lastBatteryVoltage(0.0f),
+      isCharging(false), lastChargingCheck(0) {
     memset(lineBuf, 0, sizeof(lineBuf));
     memset(prevFixBuf, 0, sizeof(prevFixBuf));
     memset(prevDistBuf, 0, sizeof(prevDistBuf));
@@ -123,6 +135,11 @@ inline HTITTracker::HTITTracker()
     memset(prevBattBuf, 0, sizeof(prevBattBuf));
     memset(prevAccBuf, 0, sizeof(prevAccBuf));
     memset(prevSpeedBuf, 0, sizeof(prevSpeedBuf));
+    
+    // Initialize battery readings array
+    for (int i = 0; i < 5; i++) {
+        batteryReadings[i] = 0.0f;
+    }
 }
 
 inline void HTITTracker::begin() {
@@ -195,8 +212,9 @@ inline void HTITTracker::update() {
         // 2) Compute "calibrated VBAT" using 5.05× instead of 4.90×
         float vb_cal = (rawADC / 4095.0f) * 3.3f * 5.05f;
 
-        // 3) Map calibrated VBAT → 0–100% clamped
-        int pct_cal = voltageToPercent(vb_cal);
+        // 3) Update charging status and get stable battery percentage
+        updateChargingStatus(vb_cal);
+        int pct_cal = getStableBatteryPercent(vb_cal);
 
         // 4) Debug print every 2 s
         static unsigned long lastPrint = 0;
@@ -209,7 +227,8 @@ inline void HTITTracker::update() {
             Serial.print("    V_ADC = "); Serial.print(vAD, 3); Serial.print(" V");
             Serial.print("    VBAT = "); Serial.print(vb, 2); Serial.print(" V");
             Serial.print("    VBAT_cal = "); Serial.print(vb_cal, 2); Serial.print(" V");
-            Serial.print("    Batt% = "); Serial.print(pct_cal); Serial.println(" %");
+            Serial.print("    Batt% = "); Serial.print(pct_cal); 
+            Serial.print(" %    Charging: "); Serial.println(isCharging ? "Yes" : "No");
         }
 
         // 5) Draw display based on current screen
@@ -514,6 +533,69 @@ inline void HTITTracker::calculateSpeed() {
     }
 }
 
+// Rolling average battery percentage for stability
+inline int HTITTracker::getStableBatteryPercent(float voltage) {
+    // Get the raw percentage
+    int rawPercent = voltageToPercent(voltage);
+    
+    // Add to rolling buffer
+    batteryReadings[batteryIndex] = rawPercent;
+    batteryIndex = (batteryIndex + 1) % 5;
+    
+    if (!batteryBufferFull && batteryIndex == 0) {
+        batteryBufferFull = true;
+    }
+    
+    // Calculate average
+    if (!batteryBufferFull) {
+        // Not enough readings yet, return current reading
+        return rawPercent;
+    }
+    
+    float sum = 0;
+    for (int i = 0; i < 5; i++) {
+        sum += batteryReadings[i];
+    }
+    
+    return (int)roundf(sum / 5.0f);
+}
+
+// Charging detection based on voltage trends
+inline void HTITTracker::updateChargingStatus(float voltage) {
+    unsigned long now = millis();
+    
+    // Only check every 5 seconds to allow for voltage stabilization
+    if (now - lastChargingCheck < 5000) {
+        return;
+    }
+    
+    // Need at least one previous reading
+    if (lastChargingCheck == 0) {
+        lastBatteryVoltage = voltage;
+        lastChargingCheck = now;
+        return;
+    }
+    
+    // Calculate voltage change over time
+    float voltageChange = voltage - lastBatteryVoltage;
+    
+    // Charging detection criteria:
+    // 1. Voltage is rising (positive change)
+    // 2. Voltage is above 4.0V (typical charging range)
+    // 3. Change is significant enough (> 0.02V over 5 seconds)
+    
+    if (voltage > 4.0f && voltageChange > 0.02f) {
+        isCharging = true;
+    } else if (voltage < 4.3f && voltageChange < -0.01f) {
+        // Discharging: voltage falling and below max charge voltage
+        isCharging = false;
+    }
+    // If voltage is stable (small change), keep previous charging state
+    
+    lastBatteryVoltage = voltage;
+    lastChargingCheck = now;
+}
+
 inline void HTITTracker::updateLCD(int pct_cal) {
     if (currentScreen) {
         updateNavigationScreen(pct_cal);
@@ -537,7 +619,11 @@ inline void HTITTracker::updateStatusScreen(int pct_cal) {
     sprintf(satBuf, "Sats:%3d     ", totalInView);
     
     char battBuf[16];
-    sprintf(battBuf, "Batt:%3d%%    ", pct_cal);
+    if (isCharging) {
+        sprintf(battBuf, "Batt:%3d%%+   ", pct_cal);  // + indicates charging
+    } else {
+        sprintf(battBuf, "Batt:%3d%%    ", pct_cal);
+    }
     
     float accuracy = lastHDOP * 5.0f;  // HDOP × 5 m
     char accBuf[16];
