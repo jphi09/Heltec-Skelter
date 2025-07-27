@@ -11,6 +11,7 @@
 #define VBAT_PIN     A0   // ADC1_CH0 on GPIO 1 (junction of 100 Ω/390 Ω divider)
 #define VBAT_EN       2   // GPIO 2 must be HIGH to connect that divider
 #define BL_CTRL_PIN  21   // GPIO 21 enables ST7735 backlight (HIGH = on)
+#define USER_BTN_PIN  0   // GPIO 0 is the USER button (active-low)
 
 class HTITTracker {
 private:
@@ -35,6 +36,26 @@ private:
     double currentLat, currentLon;     // Current coordinates
     bool hasValidPosition;             // Current position is valid
     
+    // UI Screen management
+    bool currentScreen;                // false = status screen, true = navigation screen
+    bool buttonPressed;                // Button press flag
+    unsigned long lastButtonPress;     // Debounce timing
+    
+    // Speed calculation
+    double lastLat, lastLon;           // Previous position for speed calculation
+    unsigned long lastSpeedTime;      // Time of last speed calculation
+    float currentSpeed;                // Current speed in km/h
+    bool hasValidSpeed;                // Speed calculation valid
+    
+    // Previous display state for flicker-free updates
+    char prevFixBuf[16];
+    char prevDistBuf[16]; 
+    char prevSatBuf[16];
+    char prevBattBuf[16];
+    char prevAccBuf[16];
+    char prevSpeedBuf[16];
+    bool prevDisplayValid;
+    
     // Buffer for NMEA line accumulation
     char lineBuf[128];
     int linePos;
@@ -52,6 +73,10 @@ private:
     float readBatteryVoltageRaw(int &rawADC);
     int voltageToPercent(float vb);
     void updateLCD(int pct_cal);
+    void updateStatusScreen(int pct_cal);
+    void updateNavigationScreen(int pct_cal);
+    void checkButton();
+    void calculateSpeed();
     
     // Home navigation helper methods
     float calculateBearingToHome();
@@ -88,8 +113,16 @@ inline HTITTracker::HTITTracker()
       qzssCount(0), totalInView(0), haveFix(false), lastHDOP(99.99f),
       linePos(0), lastLCDupdate(0), homeEstablished(false),
       homeLat(0.0), homeLon(0.0), currentLat(0.0), currentLon(0.0),
-      hasValidPosition(false) {
+      hasValidPosition(false), currentScreen(false), buttonPressed(false),
+      lastButtonPress(0), lastLat(0.0), lastLon(0.0), lastSpeedTime(0),
+      currentSpeed(0.0f), hasValidSpeed(false), prevDisplayValid(false) {
     memset(lineBuf, 0, sizeof(lineBuf));
+    memset(prevFixBuf, 0, sizeof(prevFixBuf));
+    memset(prevDistBuf, 0, sizeof(prevDistBuf));
+    memset(prevSatBuf, 0, sizeof(prevSatBuf));
+    memset(prevBattBuf, 0, sizeof(prevBattBuf));
+    memset(prevAccBuf, 0, sizeof(prevAccBuf));
+    memset(prevSpeedBuf, 0, sizeof(prevSpeedBuf));
 }
 
 inline void HTITTracker::begin() {
@@ -114,20 +147,27 @@ inline void HTITTracker::begin() {
     digitalWrite(BL_CTRL_PIN, HIGH);  // Turn backlight ON
     Serial.println("→ BL_CTRL (GPIO 21) = HIGH (Backlight ON)");
 
-    // 5) Set ADC attenuation so VBAT/2 (≈0.857–1.07 V) reads accurately
+    // 5) Configure USER button
+    pinMode(USER_BTN_PIN, INPUT_PULLUP);
+    Serial.println("→ USER_BTN (GPIO 0) configured with pullup");
+
+    // 6) Set ADC attenuation so VBAT/2 (≈0.857–1.07 V) reads accurately
     analogSetPinAttenuation(VBAT_PIN, ADC_11db);
 
-    // 6) Initialize Serial1 @115200 to read UC6580 NMEA
+    // 7) Initialize Serial1 @115200 to read UC6580 NMEA
     Serial1.begin(115200, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
     Serial.println("→ Serial1.begin(115200, RX=33, TX=34) for UC6580");
 
-    // 7) Initialize ST7735 display
+    // 8) Initialize ST7735 display
     st7735.st7735_init();
     st7735.st7735_fill_screen(ST7735_BLACK);
 }
 
 inline void HTITTracker::update() {
-    // A) Read raw NMEA from Serial1, echo to USB-Serial, accumulate lines
+    // A) Check button for screen switching
+    checkButton();
+    
+    // B) Read raw NMEA from Serial1, echo to USB-Serial, accumulate lines
     while (Serial1.available() > 0) {
         char c = (char)Serial1.read();
         Serial.write(c);  // echo raw NMEA
@@ -143,7 +183,7 @@ inline void HTITTracker::update() {
         }
     }
 
-    // B) Once per second, update display
+    // C) Once per second, update display
     unsigned long now = millis();
     if (now - lastLCDupdate >= LCD_INTERVAL) {
         lastLCDupdate = now;
@@ -172,7 +212,7 @@ inline void HTITTracker::update() {
             Serial.print("    Batt% = "); Serial.print(pct_cal); Serial.println(" %");
         }
 
-        // 5) Draw five rows on the ST7735
+        // 5) Draw display based on current screen
         updateLCD(pct_cal);
     }
 }
@@ -210,6 +250,9 @@ inline void HTITTracker::processNMEALine(const char* line) {
             currentLat = lat;
             currentLon = lon;
             hasValidPosition = true;
+            
+            // Calculate speed if we have a previous position
+            calculateSpeed();
             
             // Establish home if we have a fix and haven't set home yet
             if (haveFix && !homeEstablished) {
@@ -402,6 +445,203 @@ inline float HTITTracker::calculateDistanceToHome() {
     return EARTH_RADIUS * c;  // Distance in meters
 }
 
+// Button handling for screen switching
+inline void HTITTracker::checkButton() {
+    static bool lastButtonState = true;  // HIGH when not pressed (pullup)
+    bool currentButtonState = digitalRead(USER_BTN_PIN);
+    
+    // Check for button press (HIGH to LOW transition)
+    if (lastButtonState && !currentButtonState) {
+        unsigned long now = millis();
+        if (now - lastButtonPress > 200) {  // 200ms debounce
+            currentScreen = !currentScreen;  // Toggle screen
+            lastButtonPress = now;
+            prevDisplayValid = false;  // Force full redraw
+            Serial.print("→ Switched to ");
+            Serial.println(currentScreen ? "Navigation" : "Status");
+        }
+    }
+    lastButtonState = currentButtonState;
+}
+
+// Speed calculation
+inline void HTITTracker::calculateSpeed() {
+    if (!hasValidPosition) return;
+    
+    unsigned long now = millis();
+    
+    // Initialize if first valid position
+    if (lastSpeedTime == 0) {
+        lastLat = currentLat;
+        lastLon = currentLon;
+        lastSpeedTime = now;
+        return;
+    }
+    
+    // Calculate speed every 2 seconds
+    if (now - lastSpeedTime >= 2000) {
+        // Calculate distance using Haversine formula
+        double lat1 = lastLat * PI / 180.0;
+        double lon1 = lastLon * PI / 180.0;
+        double lat2 = currentLat * PI / 180.0;
+        double lon2 = currentLon * PI / 180.0;
+        
+        double dLat = lat2 - lat1;
+        double dLon = lon2 - lon1;
+        
+        double a = sin(dLat/2) * sin(dLat/2) + 
+                   cos(lat1) * cos(lat2) * 
+                   sin(dLon/2) * sin(dLon/2);
+        double c = 2 * atan2(sqrt(a), sqrt(1-a));
+        
+        // Distance in meters
+        const double EARTH_RADIUS = 6371000.0;
+        double distance = EARTH_RADIUS * c;
+        
+        // Time difference in hours
+        double timeHours = (now - lastSpeedTime) / 3600000.0;
+        
+        // Speed in km/h
+        if (timeHours > 0) {
+            currentSpeed = (distance / 1000.0) / timeHours;
+            hasValidSpeed = true;
+        }
+        
+        // Update for next calculation
+        lastLat = currentLat;
+        lastLon = currentLon;
+        lastSpeedTime = now;
+    }
+}
+
+inline void HTITTracker::updateLCD(int pct_cal) {
+    if (currentScreen) {
+        updateNavigationScreen(pct_cal);
+    } else {
+        updateStatusScreen(pct_cal);
+    }
+}
+
+inline void HTITTracker::updateStatusScreen(int pct_cal) {
+    // Status Screen: Fix, Satellites, Battery, Accuracy
+    
+    // 1) Generate new strings
+    char fixBuf[16];
+    if (haveFix) {
+        sprintf(fixBuf, "Fix: Yes     ");
+    } else {
+        sprintf(fixBuf, "Fix: No      ");
+    }
+    
+    char satBuf[16];
+    sprintf(satBuf, "Sats:%3d     ", totalInView);
+    
+    char battBuf[16];
+    sprintf(battBuf, "Batt:%3d%%    ", pct_cal);
+    
+    float accuracy = lastHDOP * 5.0f;  // HDOP × 5 m
+    char accBuf[16];
+    if (haveFix && lastHDOP > 0.0f && lastHDOP < 100.0f) {
+        sprintf(accBuf, "Acc:%4.1fm   ", accuracy);
+    } else {
+        sprintf(accBuf, "Acc: --.-m   ");
+    }
+    
+    // 2) Only update changed rows to prevent flicker
+    bool needsFullRedraw = !prevDisplayValid;
+    
+    if (needsFullRedraw) {
+        st7735.st7735_fill_screen(ST7735_BLACK);
+    }
+    
+    if (needsFullRedraw || strcmp(fixBuf, prevFixBuf) != 0) {
+        st7735.st7735_write_str(0, 0, String(fixBuf));
+        strcpy(prevFixBuf, fixBuf);
+    }
+    
+    if (needsFullRedraw || strcmp(satBuf, prevSatBuf) != 0) {
+        st7735.st7735_write_str(0, 16, String(satBuf));
+        strcpy(prevSatBuf, satBuf);
+    }
+    
+    if (needsFullRedraw || strcmp(battBuf, prevBattBuf) != 0) {
+        st7735.st7735_write_str(0, 32, String(battBuf));
+        strcpy(prevBattBuf, battBuf);
+    }
+    
+    if (needsFullRedraw || strcmp(accBuf, prevAccBuf) != 0) {
+        st7735.st7735_write_str(0, 48, String(accBuf));
+        strcpy(prevAccBuf, accBuf);
+    }
+    
+    prevDisplayValid = true;
+}
+
+inline void HTITTracker::updateNavigationScreen(int pct_cal) {
+    // Navigation Screen: Direction to Home, Distance to Home, Current Speed
+    
+    // 1) Generate new strings
+    char dirBuf[16];
+    if (haveFix) {
+        float bearingToHome = calculateBearingToHome();
+        const char* direction = getCardinalDirection(bearingToHome);
+        sprintf(dirBuf, "Dir: %s      ", direction);
+    } else {
+        sprintf(dirBuf, "Dir: O       ");
+    }
+    
+    char distBuf[16];
+    if (homeEstablished && hasValidPosition) {
+        float distanceToHome = calculateDistanceToHome();
+        if (distanceToHome < 1000) {
+            sprintf(distBuf, "Home:%3.0fm   ", distanceToHome);
+        } else {
+            sprintf(distBuf, "Home:%3.1fkm  ", distanceToHome / 1000.0);
+        }
+    } else {
+        sprintf(distBuf, "Home: --.-m   ");
+    }
+    
+    char speedBuf[16];
+    if (hasValidSpeed && currentSpeed < 99.9) {
+        sprintf(speedBuf, "Spd:%4.1fkm/h ", currentSpeed);
+    } else {
+        sprintf(speedBuf, "Spd: -.-km/h ");
+    }
+    
+    char battBuf[16];
+    sprintf(battBuf, "Batt:%3d%%    ", pct_cal);
+    
+    // 2) Only update changed rows to prevent flicker
+    bool needsFullRedraw = !prevDisplayValid;
+    
+    if (needsFullRedraw) {
+        st7735.st7735_fill_screen(ST7735_BLACK);
+    }
+    
+    if (needsFullRedraw || strcmp(dirBuf, prevFixBuf) != 0) {
+        st7735.st7735_write_str(0, 0, String(dirBuf));
+        strcpy(prevFixBuf, dirBuf);
+    }
+    
+    if (needsFullRedraw || strcmp(distBuf, prevDistBuf) != 0) {
+        st7735.st7735_write_str(0, 16, String(distBuf));
+        strcpy(prevDistBuf, distBuf);
+    }
+    
+    if (needsFullRedraw || strcmp(speedBuf, prevSpeedBuf) != 0) {
+        st7735.st7735_write_str(0, 32, String(speedBuf));
+        strcpy(prevSpeedBuf, speedBuf);
+    }
+    
+    if (needsFullRedraw || strcmp(battBuf, prevBattBuf) != 0) {
+        st7735.st7735_write_str(0, 48, String(battBuf));
+        strcpy(prevBattBuf, battBuf);
+    }
+    
+    prevDisplayValid = true;
+}
+
 inline const char* HTITTracker::getCardinalDirection(float bearingToHome) {
     if (!haveFix) {
         return "O";  // Show "O" when no GPS fix yet
@@ -429,61 +669,6 @@ inline const char* HTITTracker::getCardinalDirection(float bearingToHome) {
     } else {
         return "NW";  // Northwest
     }
-}
-
-inline void HTITTracker::updateLCD(int pct_cal) {
-    // 1) Clear entire screen
-    st7735.st7735_fill_screen(ST7735_BLACK);
-
-    // 2) Row 0 (y=0): Fix status (8 chars) + Cardinal direction (4 chars)
-    char fixBuf[16];
-    if (haveFix) {
-        sprintf(fixBuf, "Fix: Yes ");
-    } else {
-        sprintf(fixBuf, "Fix: No  ");
-    }
-    
-    // Calculate bearing to home and get cardinal direction
-    float bearingToHome = calculateBearingToHome();
-    const char* direction = getCardinalDirection(bearingToHome);
-    
-    // Add direction to display string
-    sprintf(fixBuf + 9, "%s", direction);
-    st7735.st7735_write_str(0, 0, String(fixBuf));
-
-    // 3) Row 1 (y=16): Distance to home in meters
-    char distBuf[16];
-    if (homeEstablished && hasValidPosition) {
-        float distanceToHome = calculateDistanceToHome();
-        if (distanceToHome < 1000) {
-            sprintf(distBuf, "Home:%3.0fm   ", distanceToHome);
-        } else {
-            sprintf(distBuf, "Home:%3.1fkm  ", distanceToHome / 1000.0);
-        }
-    } else {
-        sprintf(distBuf, "Home: --.-m   ");
-    }
-    st7735.st7735_write_str(0, 16, String(distBuf));
-
-    // 4) Row 2 (y=32): Satellite count (12 chars)
-    char satBuf[16];
-    sprintf(satBuf, "Sats:%3d    ", totalInView);
-    st7735.st7735_write_str(0, 32, String(satBuf));
-
-    // 5) Row 3 (y=48): Battery percentage (12 chars)
-    char battBuf[16];
-    sprintf(battBuf, "Batt:%3d%%    ", pct_cal);
-    st7735.st7735_write_str(0, 48, String(battBuf));
-
-    // 6) Row 4 (y=64): Fix accuracy in meters (12 chars)
-    float accuracy = lastHDOP * 5.0f;  // HDOP × 5 m
-    char accBuf[16];
-    if (haveFix && lastHDOP > 0.0f && lastHDOP < 100.0f) {
-        sprintf(accBuf, "Acc:%4.1fm   ", accuracy);
-    } else {
-        sprintf(accBuf, "Acc: --.-m   ");
-    }
-    st7735.st7735_write_str(0, 64, String(accBuf));
 }
 
 #endif // MAIN_H
