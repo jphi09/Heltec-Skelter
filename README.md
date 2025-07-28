@@ -1,6 +1,20 @@
 # 🛰️ HTIT-Tracker GPS Navigation System
 ### *The Ultimate Personal GPS Navigation Device for Beginners*
 
+<div align="center">
+
+![HTIT-Tracker Infographic](images/14893124-cb31-4dbd-a212-78bf407a9d9f.png)
+
+### ⭐ **If this project helps you or could save lives, please give it a STAR!** ⭐
+*Your support motivates continued development and helps others discover this life-saving tool*
+
+[![GitHub stars](https://img.shields.io/github/stars/darkmatter2222/HTIT-Tracker-Heltec-v1.2-GPS-Reciever?style=social)](https://github.com/darkmatter2222/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/darkmatter2222/HTIT-Tracker-Heltec-v1.2-GPS-Reciever?style=social)](https://github.com/darkmatter2222/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/network/members)
+[![GitHub issues](https://img.shields.io/github/issues/darkmatter2222/HTIT-Tracker-Heltec-v1.2-GPS-Reciever)](https://github.com/darkmatter2222/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/issues)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+</div>
+
 ```
     ██╗  ██╗████████╗██╗████████╗      ████████╗██████╗  █████╗  ██████╗██╗  ██╗███████╗██████╗ 
     ██║  ██║╚══██╔══╝██║╚══██╔══╝      ╚══██╔══╝██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝██╔══██╗
