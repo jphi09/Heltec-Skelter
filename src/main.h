@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 #include <HT_st7735.h>
+#include <EEPROM.h>
+#include <esp_sleep.h>
 
 // PIN DEFINITIONS
 #define VGNSS_CTRL   3    // GPIO 3 → Vext (active-low) powers UC6580 + ST7735
@@ -12,6 +14,52 @@
 #define VBAT_EN       2   // GPIO 2 must be HIGH to connect that divider
 #define BL_CTRL_PIN  21   // GPIO 21 enables ST7735 backlight (HIGH = on)
 #define USER_BTN_PIN  0   // GPIO 0 is the USER button (active-low)
+
+// EEPROM ADDRESSES
+#define EEPROM_SIZE 512
+#define EEPROM_MAGIC 0xA5B4
+#define ADDR_MAGIC 0
+#define ADDR_WAYPOINT1_LAT 4
+#define ADDR_WAYPOINT1_LON 12
+#define ADDR_WAYPOINT2_LAT 20
+#define ADDR_WAYPOINT2_LON 28
+#define ADDR_WAYPOINT3_LAT 36
+#define ADDR_WAYPOINT3_LON 44
+#define ADDR_WAYPOINT1_SET 52
+#define ADDR_WAYPOINT2_SET 53
+#define ADDR_WAYPOINT3_SET 54
+#define ADDR_SETTINGS 60
+
+// SCREEN DEFINITIONS
+enum ScreenType {
+    SCREEN_STATUS = 0,
+    SCREEN_NAVIGATION,
+    SCREEN_MAIN_MENU,
+    SCREEN_WAYPOINT_MENU,
+    SCREEN_WAYPOINT1_NAV,
+    SCREEN_WAYPOINT2_NAV,
+    SCREEN_WAYPOINT3_NAV,
+    SCREEN_SET_WAYPOINT,
+    SCREEN_SYSTEM_INFO,
+    SCREEN_POWER_MENU,
+    SCREEN_WAYPOINT_RESET,     // Ask to reset waypoint or navigate
+    SCREEN_COUNT
+};
+
+// POWER MODES
+enum PowerMode {
+    POWER_FULL = 0,
+    POWER_ECO,
+    POWER_SLEEP
+};
+
+// WAYPOINT STRUCTURE
+struct Waypoint {
+    double lat;
+    double lon;
+    bool isSet;
+    char name[12];
+};
 
 class HTITTracker {
 private:
@@ -36,10 +84,28 @@ private:
     double currentLat, currentLon;     // Current coordinates
     bool hasValidPosition;             // Current position is valid
     
-    // UI Screen management
-    bool currentScreen;                // false = status screen, true = navigation screen
+    // Enhanced waypoint system (3 waypoints + home)
+    Waypoint waypoints[3];             // Waypoint 1, 2, 3
+    int activeWaypoint;                // Currently selected waypoint (0=home, 1-3=waypoints)
+    int waypointToSet;                 // Which waypoint we're setting
+    int waypointToReset;               // Which waypoint we're considering to reset
+    
+    // Enhanced UI system
+    ScreenType currentScreen;          // Current screen being displayed
+    ScreenType lastScreen;             // Previous screen for back navigation
+    int menuIndex;                     // Current menu selection
+    int menuItemCount;                 // Number of items in current menu
+    bool inMenu;                       // Are we in a menu?
+    
+    // Button handling
     bool buttonPressed;                // Button press flag
     unsigned long lastButtonPress;     // Debounce timing
+    unsigned long buttonPressStart;    // For long press detection
+    bool longPressHandled;             // Prevent multiple long press events
+    
+    // Screen management
+    unsigned long lastActivity;        // Last user activity
+    bool forceScreenRedraw;            // Force all screens to redraw on next update
     
     // Speed calculation
     double lastLat, lastLon;           // Previous position for speed calculation
@@ -83,15 +149,32 @@ private:
     void updateLCD(int pct_cal);
     void updateStatusScreen(int pct_cal);
     void updateNavigationScreen(int pct_cal);
+    
+    // Enhanced UI screen methods
+    void updateMainMenuScreen();
+    void updateWaypointMenuScreen();
+    void updateWaypointNavigationScreen(int pct_cal);
+    void updateSetWaypointScreen();
+    void updateSystemInfoScreen(int pct_cal);
+    void updatePowerMenuScreen();
+    void updateWaypointResetScreen();
+    
     void checkButton();
     void calculateSpeed();
     int getStableBatteryPercent(float voltage);
     void updateChargingStatus(float voltage);
     
-    // Home navigation helper methods
+    // Enhanced navigation methods
     float calculateBearingToHome();
     float calculateDistanceToHome();
+    float calculateBearingToWaypoint(int waypointIndex);
+    float calculateDistanceToWaypoint(int waypointIndex);
     const char* getCardinalDirection(float bearingToHome);
+    
+    // Waypoint management
+    void setWaypoint(int index, double lat, double lon, const char* name);
+    void loadWaypointsFromEEPROM();
+    void saveWaypointsToEEPROM();
 
 public:
     // Constructor
@@ -123,11 +206,22 @@ inline HTITTracker::HTITTracker()
       qzssCount(0), totalInView(0), haveFix(false), lastHDOP(99.99f),
       linePos(0), lastLCDupdate(0), homeEstablished(false),
       homeLat(0.0), homeLon(0.0), currentLat(0.0), currentLon(0.0),
-      hasValidPosition(false), currentScreen(false), buttonPressed(false),
-      lastButtonPress(0), lastLat(0.0), lastLon(0.0), lastSpeedTime(0),
-      currentSpeed(0.0f), hasValidSpeed(false), prevDisplayValid(false),
-      batteryIndex(0), batteryBufferFull(false), lastBatteryVoltage(0.0f),
-      isCharging(false), lastChargingCheck(0) {
+      hasValidPosition(false), activeWaypoint(0), waypointToSet(0), waypointToReset(0),
+      currentScreen(SCREEN_MAIN_MENU), lastScreen(SCREEN_MAIN_MENU),
+      menuIndex(0), menuItemCount(0), inMenu(false), buttonPressed(false),
+      lastButtonPress(0), buttonPressStart(0), longPressHandled(false),
+      lastActivity(0), forceScreenRedraw(false), lastLat(0.0), lastLon(0.0), 
+      lastSpeedTime(0), currentSpeed(0.0f), hasValidSpeed(false), 
+      prevDisplayValid(false), batteryIndex(0), batteryBufferFull(false), 
+      lastBatteryVoltage(0.0f), isCharging(false), lastChargingCheck(0) {
+    
+    // Initialize waypoints as unset
+    for (int i = 0; i < 3; i++) {
+        waypoints[i].isSet = false;
+        waypoints[i].lat = 0.0;
+        waypoints[i].lon = 0.0;
+        strcpy(waypoints[i].name, "");
+    }
     memset(lineBuf, 0, sizeof(lineBuf));
     memset(prevFixBuf, 0, sizeof(prevFixBuf));
     memset(prevDistBuf, 0, sizeof(prevDistBuf));
@@ -178,6 +272,11 @@ inline void HTITTracker::begin() {
     // 8) Initialize ST7735 display
     st7735.st7735_init();
     st7735.st7735_fill_screen(ST7735_BLACK);
+    
+    // 9) Initialize EEPROM and load waypoints
+    EEPROM.begin(512);  // Initialize EEPROM with 512 bytes
+    Serial.println("→ EEPROM initialized (512 bytes)");
+    loadWaypointsFromEEPROM();
 }
 
 inline void HTITTracker::update() {
@@ -468,18 +567,198 @@ inline float HTITTracker::calculateDistanceToHome() {
 inline void HTITTracker::checkButton() {
     static bool lastButtonState = true;  // HIGH when not pressed (pullup)
     bool currentButtonState = digitalRead(USER_BTN_PIN);
+    static unsigned long buttonPressStart = 0;
+    static bool longPressHandled = false;
     
-    // Check for button press (HIGH to LOW transition)
+    // Detect button press start (HIGH to LOW transition)
     if (lastButtonState && !currentButtonState) {
         unsigned long now = millis();
         if (now - lastButtonPress > 200) {  // 200ms debounce
-            currentScreen = !currentScreen;  // Toggle screen
-            lastButtonPress = now;
-            prevDisplayValid = false;  // Force full redraw
-            Serial.print("→ Switched to ");
-            Serial.println(currentScreen ? "Navigation" : "Status");
+            buttonPressStart = now;
+            longPressHandled = false;
         }
     }
+    
+    // Detect long press (1000ms threshold)
+    if (!currentButtonState && !longPressHandled && 
+        buttonPressStart > 0 && (millis() - buttonPressStart > 1000)) {
+        
+        longPressHandled = true;
+        lastActivity = millis();
+        
+        // Long press actions - scroll through menu or return to main menu
+        if (currentScreen == SCREEN_MAIN_MENU) {
+            menuIndex = (menuIndex + 1) % 4;  // 4 items in main menu now (removed Navigation)
+            Serial.println("→ Main menu scroll (long press)");
+        } else if (currentScreen == SCREEN_WAYPOINT_MENU) {
+            menuIndex = (menuIndex + 1) % 4;  // 4 items in waypoint menu
+            Serial.println("→ Waypoint menu scroll (long press)");
+        } else if (currentScreen == SCREEN_WAYPOINT_RESET) {
+            menuIndex = (menuIndex + 1) % 3;  // 3 options: Navigate, Reset, Cancel
+            Serial.println("→ Waypoint reset menu scroll (long press)");
+        } else if (currentScreen == SCREEN_POWER_MENU) {
+            menuIndex = (menuIndex + 1) % 4;  // 4 options: Sleep, Deep Sleep, Screen Off, Back
+            Serial.println("→ Power menu scroll (long press)");
+        } else {
+            // From any other screen, long press returns to main menu
+            currentScreen = SCREEN_MAIN_MENU;
+            menuIndex = 0;
+            Serial.println("→ Long press: Return to Main Menu");
+        }
+    }
+    
+    // Detect button release (LOW to HIGH transition)
+    if (!lastButtonState && currentButtonState && !longPressHandled) {
+        unsigned long now = millis();
+        if (buttonPressStart > 0 && (now - buttonPressStart < 1000)) {
+            // Short press - select menu item or navigate
+            lastButtonPress = now;
+            lastActivity = now;
+            
+            if (currentScreen == SCREEN_MAIN_MENU) {
+                // Handle main menu selection (now has 4 items - removed Navigation)
+                if (menuIndex == 0) {  // Status
+                    currentScreen = SCREEN_STATUS;
+                    Serial.println("→ Entered Status Screen");
+                } else if (menuIndex == 1) {  // Waypoints
+                    currentScreen = SCREEN_WAYPOINT_MENU;
+                    menuIndex = 0;
+                    Serial.println("→ Entered Waypoint Menu");
+                } else if (menuIndex == 2) {  // System Info
+                    currentScreen = SCREEN_SYSTEM_INFO;
+                    Serial.println("→ Entered System Info");
+                } else if (menuIndex == 3) {  // Power Menu
+                    currentScreen = SCREEN_POWER_MENU;
+                    Serial.println("→ Entered Power Menu");
+                }
+                
+            } else if (currentScreen == SCREEN_WAYPOINT_MENU) {
+                // Handle waypoint menu selection
+                if (menuIndex == 0) {  // WP1
+                    if (waypoints[0].isSet) {
+                        currentScreen = SCREEN_WAYPOINT_RESET;
+                        waypointToReset = 0;
+                        menuIndex = 0;  // Reset to first option (Navigate)
+                        Serial.println("→ WP1 Reset/Navigate Menu");
+                    } else {
+                        currentScreen = SCREEN_SET_WAYPOINT;
+                        waypointToSet = 0;
+                        Serial.println("→ Set WP1");
+                    }
+                } else if (menuIndex == 1) {  // WP2
+                    if (waypoints[1].isSet) {
+                        currentScreen = SCREEN_WAYPOINT_RESET;
+                        waypointToReset = 1;
+                        menuIndex = 0;  // Reset to first option (Navigate)
+                        Serial.println("→ WP2 Reset/Navigate Menu");
+                    } else {
+                        currentScreen = SCREEN_SET_WAYPOINT;
+                        waypointToSet = 1;
+                        Serial.println("→ Set WP2");
+                    }
+                } else if (menuIndex == 2) {  // WP3
+                    if (waypoints[2].isSet) {
+                        currentScreen = SCREEN_WAYPOINT_RESET;
+                        waypointToReset = 2;
+                        menuIndex = 0;  // Reset to first option (Navigate)
+                        Serial.println("→ WP3 Reset/Navigate Menu");
+                    } else {
+                        currentScreen = SCREEN_SET_WAYPOINT;
+                        waypointToSet = 2;
+                        Serial.println("→ Set WP3");
+                    }
+                } else if (menuIndex == 3) {  // Back
+                    currentScreen = SCREEN_MAIN_MENU;
+                    menuIndex = 2;  // Return to Waypoints item
+                    Serial.println("→ Back to Main Menu");
+                }
+                
+            } else if (currentScreen == SCREEN_SET_WAYPOINT) {
+                // Save waypoint if GPS is ready
+                if (hasValidPosition && haveFix) {
+                    char name[12];
+                    snprintf(name, sizeof(name), "WP%d", waypointToSet + 1);
+                    setWaypoint(waypointToSet, currentLat, currentLon, name);
+                    Serial.println("→ Waypoint saved!");
+                    currentScreen = SCREEN_WAYPOINT_MENU;
+                    menuIndex = waypointToSet;
+                } else {
+                    Serial.println("→ GPS not ready - cannot save waypoint");
+                }
+                
+            } else if (currentScreen == SCREEN_WAYPOINT_RESET) {
+                // Handle waypoint reset/navigate menu
+                if (menuIndex == 0) {  // Navigate
+                    currentScreen = (ScreenType)(SCREEN_WAYPOINT1_NAV + waypointToReset);
+                    activeWaypoint = waypointToReset + 1;
+                    Serial.printf("→ Navigate to WP%d\n", waypointToReset + 1);
+                } else if (menuIndex == 1) {  // Reset
+                    // Clear the waypoint and go to set screen
+                    waypoints[waypointToReset].isSet = false;
+                    waypoints[waypointToReset].lat = 0.0;
+                    waypoints[waypointToReset].lon = 0.0;
+                    strcpy(waypoints[waypointToReset].name, "");
+                    saveWaypointsToEEPROM();
+                    
+                    currentScreen = SCREEN_SET_WAYPOINT;
+                    waypointToSet = waypointToReset;
+                    Serial.printf("→ Reset WP%d - now setting new waypoint\n", waypointToReset + 1);
+                } else if (menuIndex == 2) {  // Cancel/Back
+                    currentScreen = SCREEN_WAYPOINT_MENU;
+                    menuIndex = waypointToReset;  // Return to the waypoint item
+                    Serial.println("→ Back to Waypoint Menu");
+                }
+                
+            } else if (currentScreen == SCREEN_POWER_MENU) {
+                // Handle power menu actions
+                if (menuIndex == 0) {  // Sleep Mode (light sleep with quick wake)
+                    st7735.st7735_fill_screen(ST7735_BLACK);
+                    st7735.st7735_write_str(0, 0, "ENTERING SLEEP");
+                    st7735.st7735_write_str(0, 16, "Press to wake");
+                    delay(1000);
+                    
+                    // Enter light sleep - wakes on button press
+                    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0);  // Wake on button press (LOW)
+                    esp_light_sleep_start();
+                    
+                    // When we wake up, return to main menu
+                    currentScreen = SCREEN_MAIN_MENU;
+                    menuIndex = 0;
+                    Serial.println("→ Woke from sleep, returning to main menu");
+                    
+                } else if (menuIndex == 1) {  // Deep Sleep (full power down)
+                    st7735.st7735_fill_screen(ST7735_BLACK);
+                    st7735.st7735_write_str(0, 0, "DEEP SLEEP");
+                    st7735.st7735_write_str(0, 16, "Hold button");
+                    st7735.st7735_write_str(0, 32, "to wake up");
+                    delay(2000);
+                    
+                    // Enter deep sleep - only wakes on button press
+                    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0);  // Wake on button press (LOW)
+                    esp_deep_sleep_start();
+                    // Device will restart when woken
+                    
+                } else if (menuIndex == 2) {  // Screen Off (turn off display)
+                    st7735.st7735_fill_screen(ST7735_BLACK);
+                    currentScreen = SCREEN_STATUS;  // Go to status when reactivated
+                    Serial.println("→ Screen off mode activated");
+                    
+                } else if (menuIndex == 3) {  // Back
+                    currentScreen = SCREEN_MAIN_MENU;
+                    menuIndex = 4;  // Return to Power Menu item in main menu
+                    Serial.println("→ Back to Main Menu");
+                }
+                
+            } else {
+                // From any other screen, return to main menu
+                currentScreen = SCREEN_MAIN_MENU;
+                menuIndex = 0;
+                Serial.println("→ Return to Main Menu");
+            }
+        }
+        buttonPressStart = 0;
+    }
+    
     lastButtonState = currentButtonState;
 }
 
@@ -564,8 +843,8 @@ inline int HTITTracker::getStableBatteryPercent(float voltage) {
 inline void HTITTracker::updateChargingStatus(float voltage) {
     unsigned long now = millis();
     
-    // Only check every 5 seconds to allow for voltage stabilization
-    if (now - lastChargingCheck < 5000) {
+    // Only check every 10 seconds to allow for voltage stabilization
+    if (now - lastChargingCheck < 10000) {
         return;
     }
     
@@ -573,21 +852,22 @@ inline void HTITTracker::updateChargingStatus(float voltage) {
     if (lastChargingCheck == 0) {
         lastBatteryVoltage = voltage;
         lastChargingCheck = now;
+        isCharging = false;  // Default to not charging initially
         return;
     }
     
     // Calculate voltage change over time
     float voltageChange = voltage - lastBatteryVoltage;
     
-    // Charging detection criteria:
-    // 1. Voltage is rising (positive change)
-    // 2. Voltage is above 4.0V (typical charging range)
-    // 3. Change is significant enough (> 0.02V over 5 seconds)
+    // More restrictive charging detection criteria:
+    // 1. Voltage is rising significantly (> 0.05V over 10 seconds)
+    // 2. Voltage is above 4.15V (active charging range)
+    // 3. Significant positive trend indicating external power
     
-    if (voltage > 4.0f && voltageChange > 0.02f) {
+    if (voltage > 4.15f && voltageChange > 0.05f) {
         isCharging = true;
-    } else if (voltage < 4.3f && voltageChange < -0.01f) {
-        // Discharging: voltage falling and below max charge voltage
+    } else if (voltage < 4.10f || voltageChange < -0.02f) {
+        // Discharging: voltage falling or below charging threshold
         isCharging = false;
     }
     // If voltage is stable (small change), keep previous charging state
@@ -597,10 +877,47 @@ inline void HTITTracker::updateChargingStatus(float voltage) {
 }
 
 inline void HTITTracker::updateLCD(int pct_cal) {
-    if (currentScreen) {
-        updateNavigationScreen(pct_cal);
-    } else {
-        updateStatusScreen(pct_cal);
+    // Reset screen state when switching screens
+    static ScreenType lastDisplayedScreen = SCREEN_MAIN_MENU;
+    if (currentScreen != lastDisplayedScreen) {
+        prevDisplayValid = false;  // Force redraw when switching screens
+        forceScreenRedraw = true;  // Force all static screen variables to reset
+        lastDisplayedScreen = currentScreen;
+    }
+    
+    switch (currentScreen) {
+        case SCREEN_STATUS:
+            updateStatusScreen(pct_cal);
+            break;
+        case SCREEN_NAVIGATION:
+            updateNavigationScreen(pct_cal);
+            break;
+        case SCREEN_MAIN_MENU:
+            updateMainMenuScreen();
+            break;
+        case SCREEN_WAYPOINT_MENU:
+            updateWaypointMenuScreen();
+            break;
+        case SCREEN_WAYPOINT1_NAV:
+        case SCREEN_WAYPOINT2_NAV:
+        case SCREEN_WAYPOINT3_NAV:
+            updateWaypointNavigationScreen(pct_cal);
+            break;
+        case SCREEN_SET_WAYPOINT:
+            updateSetWaypointScreen();
+            break;
+        case SCREEN_WAYPOINT_RESET:
+            updateWaypointResetScreen();
+            break;
+        case SCREEN_SYSTEM_INFO:
+            updateSystemInfoScreen(pct_cal);
+            break;
+        case SCREEN_POWER_MENU:
+            updatePowerMenuScreen();
+            break;
+        default:
+            updateStatusScreen(pct_cal);
+            break;
     }
 }
 
@@ -619,11 +936,7 @@ inline void HTITTracker::updateStatusScreen(int pct_cal) {
     sprintf(satBuf, "Sats:%3d     ", totalInView);
     
     char battBuf[16];
-    if (isCharging) {
-        sprintf(battBuf, "Batt:%3d%%+   ", pct_cal);  // + indicates charging
-    } else {
-        sprintf(battBuf, "Batt:%3d%%    ", pct_cal);
-    }
+    sprintf(battBuf, "Batt:%3d%%    ", pct_cal);  // Consistent with GitHub - no charging indicator
     
     float accuracy = lastHDOP * 5.0f;  // HDOP × 5 m
     char accBuf[16];
@@ -755,6 +1068,410 @@ inline const char* HTITTracker::getCardinalDirection(float bearingToHome) {
     } else {
         return "NW";  // Northwest
     }
+}
+
+// ========================== ENHANCED UI METHODS ==========================
+
+inline void HTITTracker::updateMainMenuScreen() {
+    static int lastMenuIndex = -1;
+    static bool screenInitialized = false;
+    
+    // Reset if forced or first time
+    if (forceScreenRedraw) {
+        screenInitialized = false;
+        lastMenuIndex = -1;
+    }
+    
+    // Only redraw if menu selection changed or first time
+    if (!screenInitialized || lastMenuIndex != menuIndex) {
+        st7735.st7735_fill_screen(ST7735_BLACK);
+        st7735.st7735_write_str(0, 0, "MAIN MENU");
+        
+        // Menu items with selection indicator (4 items total - removed Navigation)
+        String item0 = (menuIndex == 0) ? "> Status" : "  Status";
+        String item1 = (menuIndex == 1) ? "> Waypoints" : "  Waypoints";
+        String item2 = (menuIndex == 2) ? "> System Info" : "  System Info";
+        String item3 = (menuIndex == 3) ? "> Power Menu" : "  Power Menu";
+        
+        st7735.st7735_write_str(0, 16, item0);
+        st7735.st7735_write_str(0, 32, item1);
+        st7735.st7735_write_str(0, 48, item2);
+        st7735.st7735_write_str(0, 64, item3);
+        
+        lastMenuIndex = menuIndex;
+        screenInitialized = true;
+        forceScreenRedraw = false;  // Clear the force flag
+    }
+}
+
+inline void HTITTracker::updateWaypointMenuScreen() {
+    static int lastMenuIndex = -1;
+    static bool screenInitialized = false;
+    static bool lastWaypointStates[3] = {false, false, false};
+    
+    // Reset if forced
+    if (forceScreenRedraw) {
+        screenInitialized = false;
+        lastMenuIndex = -1;
+        for (int i = 0; i < 3; i++) lastWaypointStates[i] = !waypoints[i].isSet;  // Force state change
+    }
+    
+    // Check if waypoint states changed
+    bool waypointStatesChanged = false;
+    for (int i = 0; i < 3; i++) {
+        if (lastWaypointStates[i] != waypoints[i].isSet) {
+            waypointStatesChanged = true;
+            lastWaypointStates[i] = waypoints[i].isSet;
+        }
+    }
+    
+    // Only redraw if menu selection changed, waypoint states changed, or first time
+    if (!screenInitialized || lastMenuIndex != menuIndex || waypointStatesChanged) {
+        st7735.st7735_fill_screen(ST7735_BLACK);
+        st7735.st7735_write_str(0, 0, "WAYPOINTS");
+        
+        // Show waypoint status with X for unset waypoints
+        String item0, item1, item2, item3;
+        
+        if (waypoints[0].isSet) {
+            item0 = (menuIndex == 0) ? "> Nav WP1" : "  Nav WP1";
+        } else {
+            item0 = (menuIndex == 0) ? "> Set WP1 X" : "  Set WP1 X";
+        }
+        
+        if (waypoints[1].isSet) {
+            item1 = (menuIndex == 1) ? "> Nav WP2" : "  Nav WP2";
+        } else {
+            item1 = (menuIndex == 1) ? "> Set WP2 X" : "  Set WP2 X";
+        }
+        
+        if (waypoints[2].isSet) {
+            item2 = (menuIndex == 2) ? "> Nav WP3" : "  Nav WP3";
+        } else {
+            item2 = (menuIndex == 2) ? "> Set WP3 X" : "  Set WP3 X";
+        }
+        
+        item3 = (menuIndex == 3) ? "> Back" : "  Back";
+        
+        st7735.st7735_write_str(0, 16, item0);
+        st7735.st7735_write_str(0, 32, item1);
+        st7735.st7735_write_str(0, 48, item2);
+        st7735.st7735_write_str(0, 64, item3);
+        
+        lastMenuIndex = menuIndex;
+        screenInitialized = true;
+        forceScreenRedraw = false;  // Clear the force flag
+    }
+}
+
+inline void HTITTracker::updateWaypointNavigationScreen(int pct_cal) {
+    // 1) Check if we have a valid waypoint selected
+    if (activeWaypoint == 0) {
+        // No waypoint selected - switch to waypoint set screen
+        currentScreen = SCREEN_SET_WAYPOINT;
+        forceScreenRedraw = true;
+        return;
+    }
+    
+    // Get the current waypoint index (activeWaypoint is 1-based, array is 0-based)
+    int waypointIndex = activeWaypoint - 1;
+    
+    // 2) Use the PROVEN working approach from GitHub - simple single writes
+    
+    // 1) Generate new strings EVERY time (for real-time updates) - using EXACT GitHub format
+    char dirBuf[16];
+    if (haveFix && waypointIndex >= 0 && waypointIndex < 3 && waypoints[waypointIndex].isSet) {
+        float bearingToWaypoint = calculateBearingToWaypoint(waypointIndex);
+        
+        // Use EXACT GitHub cardinal direction logic (but for waypoints)
+        const char* direction;
+        if (bearingToWaypoint >= 337.5 || bearingToWaypoint < 22.5) {
+            direction = "N";   // North
+        } else if (bearingToWaypoint >= 22.5 && bearingToWaypoint < 67.5) {
+            direction = "NE";  // Northeast
+        } else if (bearingToWaypoint >= 67.5 && bearingToWaypoint < 112.5) {
+            direction = "E";   // East
+        } else if (bearingToWaypoint >= 112.5 && bearingToWaypoint < 157.5) {
+            direction = "SE";  // Southeast
+        } else if (bearingToWaypoint >= 157.5 && bearingToWaypoint < 202.5) {
+            direction = "S";   // South
+        } else if (bearingToWaypoint >= 202.5 && bearingToWaypoint < 247.5) {
+            direction = "SW";  // Southwest
+        } else if (bearingToWaypoint >= 247.5 && bearingToWaypoint < 292.5) {
+            direction = "W";   // West
+        } else {
+            direction = "NW";  // Northwest
+        }
+        
+        sprintf(dirBuf, "Dir: %s      ", direction);  // EXACT GitHub format
+    } else {
+        sprintf(dirBuf, "Dir: O       ");  // "O" when no fix - EXACT GitHub format
+    }
+    
+    char distBuf[16];
+    if (hasValidPosition && waypointIndex >= 0 && waypointIndex < 3 && waypoints[waypointIndex].isSet) {
+        float distanceToWaypoint = calculateDistanceToWaypoint(waypointIndex);
+        if (distanceToWaypoint < 1000) {
+            sprintf(distBuf, "WP%d:%3.0fm   ", activeWaypoint, distanceToWaypoint);  // EXACT GitHub format
+        } else {
+            sprintf(distBuf, "WP%d:%3.1fkm  ", activeWaypoint, distanceToWaypoint / 1000.0);
+        }
+    } else {
+        sprintf(distBuf, "WP%d: --.-m   ", activeWaypoint);  // EXACT GitHub spacing
+    }
+    
+    char speedBuf[16];
+    if (hasValidSpeed && currentSpeed < 99.9) {
+        sprintf(speedBuf, "Spd:%4.1fkm/h ", currentSpeed);  // EXACT GitHub format
+    } else {
+        sprintf(speedBuf, "Spd: -.-km/h ");  // EXACT GitHub spacing
+    }
+    
+    char battBuf[16];
+    sprintf(battBuf, "Batt:%3d%%    ", pct_cal);  // No charging indicator - EXACT GitHub format
+    
+    // 3) Use EXACT GitHub display method - single writes with String() conversion
+    static bool needsFullRedraw = true;
+    
+    if (needsFullRedraw) {
+        st7735.st7735_fill_screen(ST7735_BLACK);
+        needsFullRedraw = false;
+    }
+    
+    // EXACT GitHub approach - single write per line with String() conversion
+    // Using default font and colors for clean, readable display
+    st7735.st7735_write_str(0, 0, String(dirBuf));
+    st7735.st7735_write_str(0, 16, String(distBuf));  
+    st7735.st7735_write_str(0, 32, String(speedBuf));
+    st7735.st7735_write_str(0, 48, String(battBuf));
+}
+
+inline void HTITTracker::updateWaypointResetScreen() {
+    static int lastMenuIndex = -1;
+    static bool screenInitialized = false;
+    static int lastWaypointToReset = -1;
+    
+    if (!screenInitialized || forceScreenRedraw || lastMenuIndex != menuIndex || lastWaypointToReset != waypointToReset) {
+        st7735.st7735_fill_screen(ST7735_BLACK);
+        
+        // Show which waypoint we're working with
+        char header[20];
+        snprintf(header, sizeof(header), "WAYPOINT %d", waypointToReset);
+        st7735.st7735_write_str(0, 0, header);
+        
+        // Show waypoint name if available
+        const char* waypointName = "";
+        if (waypointToReset == 1 && strlen(waypoints[0].name) > 0) {
+            waypointName = waypoints[0].name;
+        } else if (waypointToReset == 2 && strlen(waypoints[1].name) > 0) {
+            waypointName = waypoints[1].name;
+        } else if (waypointToReset == 3 && strlen(waypoints[2].name) > 0) {
+            waypointName = waypoints[2].name;
+        }
+        
+        if (strlen(waypointName) > 0) {
+            st7735.st7735_write_str(0, 16, waypointName);
+        }
+        
+        // Menu options
+        const char* item0 = (menuIndex == 0) ? "> Navigate" : "  Navigate";
+        const char* item1 = (menuIndex == 1) ? "> Reset" : "  Reset";
+        const char* item2 = (menuIndex == 2) ? "> Cancel" : "  Cancel";
+        
+        st7735.st7735_write_str(0, 32, item0);
+        st7735.st7735_write_str(0, 48, item1);
+        st7735.st7735_write_str(0, 64, item2);
+        
+        lastMenuIndex = menuIndex;
+        lastWaypointToReset = waypointToReset;
+        screenInitialized = true;
+        forceScreenRedraw = false;
+    }
+}
+
+inline void HTITTracker::updateSetWaypointScreen() {
+    static bool screenInitialized = false;
+    static bool lastGPSReady = false;
+    static int lastSatCount = -1;
+    
+    if (forceScreenRedraw) {
+        screenInitialized = false;
+        lastGPSReady = !hasValidPosition;  // Force change
+        lastSatCount = -1;
+    }
+    
+    bool gpsReady = (hasValidPosition && haveFix);
+    bool needsRedraw = !screenInitialized || (gpsReady != lastGPSReady) || (totalInView != lastSatCount);
+    
+    if (needsRedraw) {
+        st7735.st7735_fill_screen(ST7735_BLACK);
+        
+        char title[20];
+        snprintf(title, sizeof(title), "SET WP%d", waypointToSet + 1);
+        st7735.st7735_write_str(0, 0, String(title));
+        
+        if (gpsReady) {
+            st7735.st7735_write_str(0, 16, "GPS Ready!");
+            st7735.st7735_write_str(0, 32, "Press to save");
+        } else {
+            st7735.st7735_write_str(0, 16, "Wait for GPS...");
+            st7735.st7735_write_str(0, 32, String("Sats: " + String(totalInView)));
+        }
+        
+        lastGPSReady = gpsReady;
+        lastSatCount = totalInView;
+        screenInitialized = true;
+        forceScreenRedraw = false;
+    }
+}
+
+inline void HTITTracker::updateSystemInfoScreen(int pct_cal) {
+    static bool screenInitialized = false;
+    static int lastSatCount = -1;
+    static int lastBattPercent = -1;
+    
+    bool needsRedraw = !screenInitialized || (totalInView != lastSatCount) || (pct_cal != lastBattPercent);
+    
+    if (needsRedraw) {
+        st7735.st7735_fill_screen(ST7735_BLACK);
+        st7735.st7735_write_str(0, 0, "SYSTEM INFO");
+        st7735.st7735_write_str(0, 16, "FW: v1.2 Enh");
+        st7735.st7735_write_str(0, 32, String("Sats: " + String(totalInView)));
+        st7735.st7735_write_str(0, 48, String("Batt: " + String(pct_cal) + "%"));
+        
+        lastSatCount = totalInView;
+        lastBattPercent = pct_cal;
+        screenInitialized = true;
+    }
+}
+
+inline void HTITTracker::updatePowerMenuScreen() {
+    static int lastMenuIndex = -1;
+    static bool screenInitialized = false;
+    
+    if (!screenInitialized || forceScreenRedraw || lastMenuIndex != menuIndex) {
+        st7735.st7735_fill_screen(ST7735_BLACK);
+        st7735.st7735_write_str(0, 0, "POWER MENU");
+        
+        // Power menu options
+        const char* item0 = (menuIndex == 0) ? "> Sleep Mode" : "  Sleep Mode";
+        const char* item1 = (menuIndex == 1) ? "> Deep Sleep" : "  Deep Sleep";
+        const char* item2 = (menuIndex == 2) ? "> Screen Off" : "  Screen Off";
+        const char* item3 = (menuIndex == 3) ? "> Back" : "  Back";
+        
+        st7735.st7735_write_str(0, 16, item0);
+        st7735.st7735_write_str(0, 32, item1);
+        st7735.st7735_write_str(0, 48, item2);
+        st7735.st7735_write_str(0, 64, item3);
+        
+        lastMenuIndex = menuIndex;
+        screenInitialized = true;
+        forceScreenRedraw = false;
+    }
+}
+
+// ========================== WAYPOINT MANAGEMENT ==========================
+
+inline void HTITTracker::setWaypoint(int index, double lat, double lon, const char* name) {
+    if (index >= 0 && index < 3) {
+        waypoints[index].lat = lat;
+        waypoints[index].lon = lon;
+        waypoints[index].isSet = true;
+        strncpy(waypoints[index].name, name, 11);
+        waypoints[index].name[11] = '\0';
+        saveWaypointsToEEPROM();
+    }
+}
+
+inline void HTITTracker::loadWaypointsFromEEPROM() {
+    // Check magic number
+    uint32_t magic;
+    EEPROM.get(ADDR_MAGIC, magic);
+    if (magic != EEPROM_MAGIC) {
+        // First time setup - initialize with defaults
+        for (int i = 0; i < 3; i++) {
+            waypoints[i].isSet = false;
+            waypoints[i].lat = 0.0;
+            waypoints[i].lon = 0.0;
+            strcpy(waypoints[i].name, "");
+        }
+        saveWaypointsToEEPROM();
+        Serial.println("→ EEPROM initialized with defaults");
+        return;
+    }
+    
+    // Load waypoints from EEPROM
+    for (int i = 0; i < 3; i++) {
+        int baseAddr = ADDR_WAYPOINT1_LAT + i * 20; // 20 bytes per waypoint
+        EEPROM.get(baseAddr, waypoints[i].lat);
+        EEPROM.get(baseAddr + 8, waypoints[i].lon);
+        EEPROM.get(ADDR_WAYPOINT1_SET + i, waypoints[i].isSet);
+        snprintf(waypoints[i].name, sizeof(waypoints[i].name), "WP%d", i + 1);
+    }
+    Serial.println("→ Waypoints loaded from EEPROM");
+}
+
+inline void HTITTracker::saveWaypointsToEEPROM() {
+    // Save magic number
+    uint32_t magic = EEPROM_MAGIC;
+    EEPROM.put(ADDR_MAGIC, magic);
+    
+    // Save waypoints
+    for (int i = 0; i < 3; i++) {
+        int baseAddr = ADDR_WAYPOINT1_LAT + i * 20; // 20 bytes per waypoint
+        EEPROM.put(baseAddr, waypoints[i].lat);
+        EEPROM.put(baseAddr + 8, waypoints[i].lon);
+        EEPROM.put(ADDR_WAYPOINT1_SET + i, waypoints[i].isSet);
+    }
+    EEPROM.commit();
+    Serial.println("→ Waypoints saved to EEPROM");
+}
+
+inline float HTITTracker::calculateBearingToWaypoint(int waypointIndex) {
+    if (waypointIndex < 0 || waypointIndex >= 3 || !waypoints[waypointIndex].isSet || !hasValidPosition) {
+        return 0.0f;  // Default to North
+    }
+    
+    // Calculate bearing from current position to waypoint
+    double lat1 = currentLat * PI / 180.0;
+    double lon1 = currentLon * PI / 180.0;
+    double lat2 = waypoints[waypointIndex].lat * PI / 180.0;
+    double lon2 = waypoints[waypointIndex].lon * PI / 180.0;
+    
+    double dLon = lon2 - lon1;
+    
+    double y = sin(dLon) * cos(lat2);
+    double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
+    
+    double bearing = atan2(y, x) * 180.0 / PI;
+    bearing = fmod(bearing + 360.0, 360.0);  // Normalize to 0-360
+    
+    return bearing;
+}
+
+inline float HTITTracker::calculateDistanceToWaypoint(int waypointIndex) {
+    if (waypointIndex < 0 || waypointIndex >= 3 || !waypoints[waypointIndex].isSet || !hasValidPosition) {
+        return 0.0f;  // No distance if waypoint not set or no position
+    }
+    
+    // Calculate distance using Haversine formula
+    double lat1 = currentLat * PI / 180.0;
+    double lon1 = currentLon * PI / 180.0;
+    double lat2 = waypoints[waypointIndex].lat * PI / 180.0;
+    double lon2 = waypoints[waypointIndex].lon * PI / 180.0;
+    
+    double dLat = lat2 - lat1;
+    double dLon = lon2 - lon1;
+    
+    double a = sin(dLat/2) * sin(dLat/2) + 
+               cos(lat1) * cos(lat2) * 
+               sin(dLon/2) * sin(dLon/2);
+    double c = 2 * atan2(sqrt(a), sqrt(1-a));
+    
+    // Earth's radius in meters
+    const double EARTH_RADIUS = 6371000.0;
+    
+    return EARTH_RADIUS * c;  // Distance in meters
 }
 
 #endif // MAIN_H

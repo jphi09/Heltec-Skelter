@@ -58,20 +58,236 @@ Here's the critical scenario this device solves:
 - 📱 Cell towers have limited range (usually 1-25 miles)
 - 🏔️ Mountains, forests, and valleys block cell signals easily
 - 🌍 GPS signals come from space and penetrate most obstacles
+
+---
+
+## ✨ **NEW v1.2 ENHANCED FEATURES**
+
+### 🔧 **Major System Upgrades**
+- **📱 Multi-Screen Menu System** - Navigate through 8 intuitive screens with flicker-free menu interface
+- **📍 Three Waypoint Navigation** - Store and navigate to 3 different waypoints plus home location
+- **💾 Persistent Storage** - Waypoints saved permanently in EEPROM memory (survives power loss)
+- **⚡ Advanced Power Management** - Full/Eco modes with intelligent screen timeout
+- **🔄 Enhanced UI** - Professional display updates with anti-flicker optimization
+- **🎯 Streamlined Navigation** - Simplified menu structure for faster waypoint access
+
+### 📱 **Complete Screen System**
+1. **📊 Status Screen** - GPS fix, satellites, battery, accuracy
+2. **🧭 Navigation Screen** - Direction, distance, speed to active waypoint
+3. **📋 Main Menu** - Access to 4 core functions (Status, Waypoints, System Info, Power)
+4. **📍 Waypoint Menu** - Manage and navigate to all 3 waypoints with visual indicators
+5. **🎯 Waypoint Navigation** - Dedicated navigation screens for each waypoint (WP1, WP2, WP3)
+6. **➕ Set Waypoint** - Interactive waypoint setting interface with GPS status
+7. **ℹ️ System Info** - Firmware version, satellite count, battery details, power mode
+8. **⚡ Power Menu** - Battery optimization controls with Full Power and Eco Mode options
+
+### 🔋 **Smart Power Management**
+- **🔥 Full Power Mode** - 1s refresh, full brightness, optimal performance for active navigation
+- **💚 Eco Mode** - 2s refresh, reduced brightness, extended battery life for long expeditions
+
+### 🎮 **Enhanced Button Controls**
+- **Short Press** - Navigate between screens and select menu items
+- **Long Press** - Access menu navigation and scroll through options  
+- **Smart Navigation** - Intuitive menu flow with visual selection indicators (> arrows)
+- **Simplified Interface** - Streamlined 4-item main menu for faster access to core functions
+
+---
+
+## 🎯 **The Power of Three Waypoints: Why Multiple Navigation Points Save Lives**
+
+### 🆘 **Real-World Emergency Scenarios**
+
+The HTIT-Tracker's **three waypoint system** isn't just a convenience feature—it's a **life-saving navigation strategy** that addresses complex emergency situations where a single "home" point isn't enough.
+
+#### **🏔️ Scenario 1: Multi-Day Hiking Emergency**
+```
+Day 1: Set WP1 at TRAILHEAD (your car)
+Day 2: Set WP2 at BASE CAMP (water source, shelter)  
+Day 3: Set WP3 at EMERGENCY CACHE (food, first aid)
+
+Emergency: Lost in bad weather, visibility near zero
+→ Navigate to closest waypoint for immediate safety
+→ Use other waypoints to plan evacuation route
+→ Multiple escape routes prevent being trapped
+```
+
+#### **�️ Scenario 2: Search & Rescue Operations**
+```
+WP1: INCIDENT COMMAND POST (coordination center)
+WP2: LAST KNOWN POSITION (search starting point)
+WP3: EXTRACTION POINT (helicopter landing zone)
+
+Lost team member scenario:
+→ Navigate to Last Known Position to begin search
+→ When found, navigate to Extraction Point for evacuation  
+→ Return to Command Post for debriefing
+```
+
+#### **🚗 Scenario 3: Remote Work Site Emergency**
+```
+WP1: MAIN CAMP (communications, supplies)
+WP2: VEHICLE STAGING AREA (evacuation transport)
+WP3: SAFETY SHELTER (emergency supplies, radio)
+
+Medical emergency:
+→ Navigate to Vehicle Staging for rapid evacuation
+→ If vehicles unavailable, navigate to Safety Shelter
+→ If shelter compromised, navigate to Main Camp
+```
+
+### 🧭 **Strategic Navigation Advantages**
+
+#### **🔀 Multiple Escape Routes**
+- **No Single Point of Failure** - If one waypoint becomes inaccessible, navigate to alternatives
+- **Weather Adaptability** - Choose safest route based on current conditions
+- **Distance Optimization** - Always navigate to the closest safe point
+- **Terrain Avoidance** - Route around dangerous areas using alternate waypoints
+
+#### **📍 Tactical Waypoint Placement**
+- **WP1 (Primary Exit)** - Your main return point (car, base camp, extraction)
+- **WP2 (Safety Cache)** - Emergency supplies, shelter, or communication point  
+- **WP3 (Alternative Route)** - Backup exit or strategic resource location
+
+#### **💡 Professional Use Cases**
+
+**Search & Rescue Teams:**
+- Command Post, Last Known Position, Evacuation Zone
+- Coordinate team movements with multiple reference points
+- Establish communication relay points and supply caches
+
+**Military & Law Enforcement:**
+- Base, Objective, Extraction Point
+- Multiple rally points for team coordination
+- Backup positions for tactical flexibility
+
+**Scientific Expeditions:**
+- Base Camp, Research Site, Equipment Cache
+- Data collection points with known coordinates
+- Emergency supply locations for extended missions
+
+**Industrial Operations:**
+- Work Site, Safety Station, Equipment Depot
+- Emergency evacuation routes from remote locations
+- Resource coordination for large project areas
+
+### 💾 **Persistent Storage: Your Waypoints Never Disappear**
+
+**EEPROM Memory Protection:**
+- **Power Loss Safe** - Waypoints survive complete battery depletion
+- **Reboot Persistent** - Coordinates remain after device restart
+- **Long-Term Stable** - Memory retains data for years without power
+- **Corruption Resistant** - Built-in validation prevents data loss
+
+**Emergency Reliability:**
+```
+Device dies overnight → Recharge battery → Power on → ALL WAYPOINTS RESTORED
+Battery completely drained → Replace battery → Turn on → WAYPOINTS STILL THERE  
+Drop device in water → Dry out electronics → Boot up → NAVIGATION DATA INTACT
+```
+
+### 🔄 **Smart Waypoint Management**
+
+#### **Visual Status System**
+- **"Nav WP1"** - Waypoint is set and ready for navigation
+- **"Set WP1 X"** - Waypoint is empty (X indicator shows unset status)
+- **Auto-Detection** - System automatically shows which waypoints are available
+
+#### **Intelligent Menu Flow**
+- **Unset Waypoint** - Selecting automatically opens Set Waypoint screen
+- **Set Waypoint** - Selecting opens dedicated navigation screen
+- **Quick Access** - Navigate to any set waypoint in just 3 button presses
+
+#### **Professional Display**
+- **WP1 Navigation**: Shows "WP1: NE | Dist: 2.3km | Spd: 3.1km/h"
+- **Clear Identification** - Always know which waypoint you're navigating to
+- **Real-Time Updates** - Direction and distance update as you move
+
+### 🎯 **Beginner-Friendly Strategy Guide**
+
+#### **🥾 For Hikers: The "Triangle of Safety"**
+```
+1. Set WP1 at PARKING LOT (your car) - Primary exit
+2. Set WP2 at TRAIL JUNCTION - Known landmark for reorientation  
+3. Set WP3 at WATER SOURCE - Emergency supply point
+```
+
+#### **🏕️ For Campers: The "Resource Network"**
+```
+1. Set WP1 at CAMP ENTRANCE - Main access road
+2. Set WP2 at WATER PUMP - Essential resource location
+3. Set WP3 at RANGER STATION - Emergency assistance
+```
+
+#### **🚗 For Off-Roaders: The "Recovery Chain"**
+```
+1. Set WP1 at PAVEMENT - Last known good road
+2. Set WP2 at FUEL CACHE - Backup supplies
+3. Set WP3 at HIGH GROUND - Cell service/GPS clarity
+```
+
+This **three waypoint system transforms your HTIT-Tracker from a simple "find home" device into a professional-grade navigation tool** that provides multiple safety options, strategic flexibility, and reliable backup routes in any emergency situation.
 - ⚡ GPS receivers use very little power (perfect for emergencies)
 
 ### ✨ Key Features
-- � **Emergency Navigation**: Life-saving backup when cell service fails but GPS still works
-- �🏠 **Smart Home Navigation**: Automatically establishes "home" when GPS fixes, then guides you back with cardinal directions
-- 🧭 **8-Way Directional Guidance**: Shows N, NE, E, SE, S, SW, W, NW directions to walk toward home
-- 📏 **Distance Tracking**: Displays accurate distance to home in meters or kilometers
-- 🚀 **Speed Monitoring**: Real-time speed calculation in km/h
-- 🔋 **Advanced Battery Management**: Rolling average battery percentage with charging detection (20+ hour battery life)
-- 📱 **Dual-Screen Interface**: Toggle between Status and Navigation screens with a button press
+- 🆘 **Emergency Navigation**: Life-saving backup when cell service fails but GPS still works
+- 🏠 **Smart Home Navigation**: Automatically establishes "home" when GPS fixes, then guides you back with cardinal directions
+- 🧭 **8-Way Directional Guidance**: Shows N, NE, E, SE, S, SW, W, NW directions to walk toward any waypoint
+- 📏 **Professional Distance Tracking**: Accurate Haversine calculations in meters or kilometers  
+- 🚀 **Real-Time Speed Monitoring**: Live speed calculation in km/h for movement tracking
+- 🔋 **Advanced Battery Management**: Rolling average percentage with charging detection (20+ hour battery life)
+- � **Persistent Waypoint Storage**: EEPROM memory preserves waypoints through power loss and resets
+- 📱 **Streamlined Menu Interface**: Professional 8-screen system with anti-flicker display
 - 🛰️ **Multi-GNSS Support**: GPS, GLONASS, BDS, Galileo, NAVIC, QZSS satellites for maximum reliability
-- ⚡ **Anti-Flicker Display**: Smooth, professional display updates without screen flashing
-- 🌍 **Works Anywhere**: Global coverage wherever GPS satellites are visible
-- 💧 **No Internet Required**: Completely offline operation for true wilderness use
+- ⚡ **Smart Power Modes**: Full/Eco modes with intelligent screen refresh and battery optimization
+- 🌍 **Complete Offline Operation**: Works anywhere GPS satellites are visible, no internet required
+
+---
+
+## 🎯 **The Revolutionary Three-Waypoint System**
+
+### **Why Three Waypoints Can Save Your Life**
+
+The HTIT-Tracker v1.2's **three waypoint system** transforms this device from a simple "find home" tool into a **professional-grade tactical navigation system**. Here's why having multiple waypoints is absolutely critical for safety:
+
+#### **🆘 Real Emergency Scenarios**
+
+**Lost Hiker Scenario:**
+```
+WP1: PARKING LOT (your car) - 2.3km East
+WP2: TRAIL SHELTER (emergency supplies) - 0.8km North  
+WP3: RANGER STATION (help & communication) - 1.5km South
+
+Weather turns bad, visibility drops to zero:
+→ Navigate to WP2 (closest) for immediate shelter
+→ Wait out storm, then navigate to WP3 for help
+→ Finally return to WP1 when conditions improve
+```
+
+**Search & Rescue Operation:**
+```
+WP1: COMMAND POST (coordination center)
+WP2: LAST KNOWN POSITION (search start point)
+WP3: EXTRACTION ZONE (helicopter landing)
+
+Missing person found injured:
+→ Navigate to WP3 for fastest medical evacuation
+→ If weather prevents helicopter, navigate to WP1 for vehicle transport
+→ Use WP2 as reference point for search coordination
+```
+
+#### **🔀 Strategic Advantages**
+
+**Multiple Escape Routes:**
+- **Primary route blocked?** Navigate to alternative waypoint
+- **Distance optimization:** Always head to the closest safe point
+- **Weather adaptation:** Choose route based on current conditions
+- **Resource management:** Direct access to supplies, water, or communication
+
+**Professional Flexibility:**
+- **Military/LEO:** Base, Objective, Extraction Point coordination
+- **Scientific Teams:** Camp, Research Site, Equipment Cache management  
+- **Industrial Work:** Office, Worksite, Safety Station navigation
+- **Emergency Response:** Multiple rally points and resource locations
 
 ---
 
@@ -239,11 +455,17 @@ When you purchase the [Heltec ESP32 LoRa Meshtastic Asset Wireless Tracker](http
 
 ---
 
-## 📱 Understanding the Display Interface
+## 📱 Understanding the Complete Display Interface
 
-Your HTIT-Tracker has **TWO screens** that you can switch between using the **USER button** (GPIO 0):
+Your HTIT-Tracker now has **10 different screens** with an intuitive menu navigation system:
 
-### 🏠 Screen 1: Status Screen (Default)
+### 🎮 **Button Controls & Screen Timeout**
+- **Short Press**: Navigate between screens and select menu items
+- **Long Press**: Access menu navigation and scroll through options
+- **Screen Timeout**: 30 seconds of inactivity returns to Status screen (except Status/Navigation screens)
+- **Activity Reset**: Any button press resets the timeout timer
+
+### 🏠 **Screen 1: Status Screen (Default)**
 ```
 ┌─────────────────┐
 │ Fix: Yes        │  ← GPS Fix Status (Yes/No)
@@ -252,8 +474,9 @@ Your HTIT-Tracker has **TWO screens** that you can switch between using the **US
 │ Acc: 2.5m       │  ← GPS Accuracy in meters
 └─────────────────┘
 ```
+**Navigation**: Short press → Navigation Screen | Long press → Main Menu
 
-### 🧭 Screen 2: Navigation Screen (Press Button)
+### 🧭 **Screen 2: Navigation Screen**
 ```
 ┌─────────────────┐
 │ Dir: NE         │  ← Direction to walk toward home
@@ -262,11 +485,218 @@ Your HTIT-Tracker has **TWO screens** that you can switch between using the **US
 │ Batt: 85%       │  ← Battery percentage
 └─────────────────┘
 ```
+**Navigation**: Short press → Main Menu | Long press → Main Menu
 
-### 🎮 Button Controls
-- **Single Press**: Switch between Status and Navigation screens
-- **Automatic**: Screen updates every second with new data
-- **Anti-Flicker**: Only changed data refreshes (smooth display)
+### 📋 **Screen 3: Main Menu (Simplified)**
+```
+┌─────────────────┐
+│ MAIN MENU       │
+│ > Status        │  ← Jump to Status Screen
+│   Waypoints     │  ← Access waypoint management
+│   System Info   │  ← Device information
+│   Power Menu    │  ← Battery optimization
+└─────────────────┘
+```
+**Navigation**: Short press → Select item | Long press → Scroll through options
+**Streamlined Design**: Reduced from 5 to 4 items for faster access to core functions
+**Smart Interface**: All waypoint navigation accessed through Waypoints submenu
+
+### 📍 **Screen 4: Waypoint Menu**
+```
+┌─────────────────┐
+│ WAYPOINTS       │
+│ > Nav WP1       │  ← Navigate to WP1 (if set)
+│   Set WP2 X     │  ← Set Waypoint 2 (X = not set)
+│   Set WP3 X     │  ← Set Waypoint 3 (X = not set)
+│   Back          │  ← Return to Main Menu
+└─────────────────┘
+```
+**Navigation**: Short press → Select | Long press → Scroll options
+**Visual Status Indicators**: 
+- "Nav WPx" = Waypoint is set and ready for navigation
+- "Set WPx X" = Waypoint is not set (X indicator shows unset status)
+**Smart Actions**: Selecting unset waypoint automatically takes you to Set Waypoint screen
+
+### 🎯 **Screen 5-7: Waypoint Navigation (WP1, WP2, WP3)**
+```
+┌─────────────────┐
+│ WP1: NE         │  ← Direction to Waypoint 1
+│ Dist: 1.2km     │  ← Distance to waypoint
+│ Spd: 4.2km/h    │  ← Current speed
+│ Batt: 85%       │  ← Battery status
+└─────────────────┘
+```
+**Navigation**: Short press → Back to menu | Long press → Status Screen
+
+### ➕ **Screen 8: Set Waypoint**
+```
+┌─────────────────┐
+│ SET WP1         │  ← Shows which waypoint (WP1, WP2, or WP3)
+│ GPS Ready!      │  ← GPS status
+│ Press to save   │  ← Action instruction
+│ Long: go back   │  ← Exit instruction
+└─────────────────┘
+```
+**Navigation**: Short press → Save waypoint | Long press → Back to menu
+**Smart Display**: Shows exactly which waypoint slot will be used
+
+### ℹ️ **Screen 9: System Info**
+```
+┌─────────────────┐
+│ FW: v1.2 Enh    │  ← Firmware version
+│ Sats: 12        │  ← Satellite count
+│ Batt: 85%+      │  ← Battery with charging
+│ Mode: Full      │  ← Current power mode
+└─────────────────┘
+```
+**Navigation**: Short press → Back to menu | Long press → Status Screen
+
+### ⚡ **Screen 10: Power Menu**
+```
+┌─────────────────┐
+│ POWER MENU      │
+│ > Full Power    │  ← Maximum performance
+│   Eco Mode      │  ← Battery optimization
+│   Back          │  ← Return to Main Menu
+└─────────────────┘
+```
+**Navigation**: Short press → Select mode | Long press → Scroll options
+
+---
+
+## ⏰ **Screen Timeout Behavior**
+
+### **Timeout Settings**
+| Screen Type | Timeout | Behavior |
+|-------------|---------|----------|
+| **Status Screen** | None | Always available (no timeout) |
+| **Navigation Screen** | None | Always available (no timeout) |
+| **Main Menu** | 30 seconds | Returns to Status screen |
+| **Waypoint Menu** | 30 seconds | Returns to Status screen |
+| **WP Navigation** | 30 seconds | Returns to Status screen |
+| **Set Waypoint** | 30 seconds | Returns to Status screen |
+| **System Info** | 30 seconds | Returns to Status screen |
+| **Power Menu** | 30 seconds | Returns to Status screen |
+
+### **🔄 Timeout Logic**
+- **Purpose**: Prevents accidentally staying in menus and draining battery
+- **Timer Reset**: Any button press (short or long) resets the 30-second timer
+- **Safe Screens**: Status and Navigation screens never timeout (always accessible)
+- **Menu Protection**: All menu screens timeout to prevent getting "stuck" in menus
+- **Visual Feedback**: Serial monitor shows "Screen timeout - returning to Status" message
+- **Emergency Access**: Ensures you can always return to essential navigation functions
+
+---
+
+## 🧭 **Complete Navigation Flow**
+
+### **Quick Access Pattern**
+```
+Status Screen ──short──> Navigation Screen ──short──> Main Menu
+     ↑                                                      │
+     └──────────────── long press from anywhere ────────────┘
+```
+
+### **Menu Navigation Pattern**
+```
+Main Menu (4 items - streamlined interface)
+├── Status ──short──> Status Screen
+├── Waypoints ──short──> Waypoint Menu
+│   ├── Nav WP1 ──short──> WP1 Navigation
+│   ├── Nav WP2 ──short──> WP2 Navigation  
+│   ├── Set New ──short──> Set Waypoint Screen
+│   └── Back ──short──> Main Menu
+├── System Info ──short──> System Info Screen
+└── Power Menu ──short──> Power Menu
+    ├── Full Power ──short──> Set mode & return
+    ├── Eco Mode ──short──> Set mode & return
+    └── Back ──short──> Main Menu
+```
+
+### **Button Behavior Guide**
+
+| Current Screen | Short Press | Long Press |
+|----------------|-------------|------------|
+| **Status** | → Navigation | → Main Menu |
+| **Navigation** | → Main Menu | → Main Menu |
+| **Main Menu** | Select item | Scroll options |
+| **Waypoint Menu** | Select item | Scroll options |
+| **WP Navigation** | → Back to menu | → Status |
+| **Set Waypoint** | Save (if GPS ready) | → Back to menu |
+| **System Info** | → Back to menu | → Status |
+| **Power Menu** | Select mode | Scroll options |
+
+### **Smart Features**
+- **Menu Memory**: Returns to the same menu position when navigating back
+- **Auto-Exit**: Inactive menus timeout and return to Status screen
+- **GPS Awareness**: Set Waypoint only works when GPS has a fix
+- **Visual Feedback**: Selected menu items are marked with ">"
+- **Power Saving**: Menu timeouts respect current power mode settings
+
+---
+
+## 🚀 **Quick Start Guide for Enhanced Menu System**
+
+## 🚀 **Quick Start Guide for Enhanced v1.2 System**
+
+### **🎯 Basic Operation (First Time Users)**
+1. **Power On** → Device starts on Status Screen showing GPS fix, satellites, battery, accuracy
+2. **Short Press** → Switch to Navigation Screen showing direction/distance to home
+3. **Short Press Again** → Enter simplified Main Menu with 4 core options
+4. **Long Press** → Scroll through menu options (watch for ">" selection indicator)  
+5. **Short Press** → Select highlighted option
+
+### **📍 Setting Your First Waypoint (Revolutionary 3-Waypoint System)**
+1. **Navigate to**: Main Menu → Waypoints → Set New (shows X if unset)
+2. **GPS Status Check** → Screen shows "GPS Ready!" when fix is acquired
+3. **Short Press** → Save waypoint as WP1 (automatically stores to EEPROM)
+4. **Persistent Storage** → Waypoint permanently saved, survives power loss
+5. **Visual Confirmation** → Menu now shows "Nav WP1" (no X) indicating waypoint is ready
+
+### **🎯 Advanced Three-Waypoint Strategy (Life-Saving Features)**
+```
+Strategic Waypoint Placement:
+WP1 = PRIMARY EXIT (car, base camp, main return point)
+WP2 = SAFETY CACHE (emergency supplies, shelter, water)  
+WP3 = ALTERNATIVE ROUTE (backup exit, communication point)
+
+Emergency Navigation:
+- Lost and need immediate shelter → Navigate to WP2 (Safety Cache)
+- Primary route blocked → Navigate to WP3 (Alternative Route)
+- Mission complete → Navigate to WP1 (Primary Exit)
+```
+
+### **💾 Persistent Storage Features (Never Lose Your Waypoints)**
+- **EEPROM Memory**: All waypoints saved permanently to non-volatile memory
+- **Power Loss Safe**: Waypoints survive complete battery depletion and device reset
+- **Boot Persistent**: Coordinates automatically restored on startup
+- **Corruption Resistant**: Built-in validation prevents data loss
+- **Professional Reliability**: Years of storage without power required
+
+### **🆘 Emergency Quick Access (Critical Survival Features)**
+- **Any Screen + Long Press** → Instantly return to Status Screen for GPS info
+- **Status/Navigation Screens** → No timeout, always accessible for emergency use
+- **Menu Auto-Exit** → Menus timeout after 30 seconds to preserve battery
+- **Multiple Escape Routes** → Three waypoints provide tactical navigation flexibility
+
+### **⚡ Smart Power Management (Extended Battery Life)**
+- **Access**: Main Menu → Power Menu
+- **Full Power Mode**: Maximum performance for active navigation (shorter battery)
+- **Eco Mode**: Extended battery life for long expeditions (2-3x longer operation)
+- **Intelligent Refresh**: Screen updates adapt to power mode for optimal efficiency
+
+### **🎮 Pro Navigation Tips (Expert-Level Usage)**
+- **Menu Navigation**: Long press scrolls, short press selects (intuitive flow)
+- **Quick Exit Strategy**: Long press from any screen returns to Status for emergency
+- **Waypoint Status**: Look for "X" indicators to see which waypoints need setting
+- **GPS Readiness**: Only set waypoints when "GPS Ready!" is displayed
+- **Strategic Planning**: Use all 3 waypoints for comprehensive navigation coverage
+
+### **🔄 Streamlined Interface Benefits**
+- **4-Item Main Menu**: Reduced from 5 items for faster navigation
+- **Direct Access**: Status screen reachable from main menu in one press
+- **Waypoint Focus**: All navigation features centralized in Waypoints submenu
+- **Professional Flow**: Logical progression from status → navigation → waypoints
 
 ---
 

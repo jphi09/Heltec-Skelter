@@ -9,6 +9,7 @@
             "name": "PlatformIO",
             "includePath": [
                 "C:/Users/ryans/source/arduinorepos/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/src",
+                "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                 "C:/Users/ryans/source/arduinorepos/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/.pio/libdeps/heltec_wifi_lora_32_V3/Heltec ESP32 Dev-Boards/src",
                 "C:/Users/ryans/source/arduinorepos/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/.pio/libdeps/heltec_wifi_lora_32_V3/Adafruit GFX Library",
                 "C:/Users/ryans/source/arduinorepos/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/.pio/libdeps/heltec_wifi_lora_32_V3/Adafruit BusIO",
@@ -219,7 +220,6 @@
                 "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                 "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src",
                 "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src",
-                "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                 "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/ESP32/src",
                 "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/ESPmDNS/src",
                 "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/Ethernet/src",
@@ -251,6 +251,7 @@
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
                     "C:/Users/ryans/source/arduinorepos/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/src",
+                    "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                     "C:/Users/ryans/source/arduinorepos/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/.pio/libdeps/heltec_wifi_lora_32_V3/Heltec ESP32 Dev-Boards/src",
                     "C:/Users/ryans/source/arduinorepos/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/.pio/libdeps/heltec_wifi_lora_32_V3/Adafruit GFX Library",
                     "C:/Users/ryans/source/arduinorepos/HTIT-Tracker-Heltec-v1.2-GPS-Reciever/.pio/libdeps/heltec_wifi_lora_32_V3/Adafruit BusIO",
@@ -461,7 +462,6 @@
                     "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                     "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src",
                     "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src",
-                    "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                     "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/ESP32/src",
                     "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/ESPmDNS/src",
                     "C:/Users/ryans/.platformio/packages/framework-arduinoespressif32/libraries/Ethernet/src",

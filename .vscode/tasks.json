@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build HTIT Tracker",
+			"type": "shell",
+			"command": "pio build",
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"args": []
+		}
+	]
+}
