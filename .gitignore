@@ -30,3 +30,32 @@
 *.exe
 *.out
 *.app
+
+# PlatformIO build files (keep .pio directory but ignore build artifacts)
+.pio/build/
+.pio/libdeps/
+
+# Development files
+*_COMPLETE.md
+*_SUMMARY.md
+*.backup
+*.tmp
+*_backup.*
+*_old.*
+*_new.*
+*_fixed.*
+
+# IDE files (optional - keep .vscode for consistency)
+# .vscode/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
