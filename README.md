@@ -1,8 +1,6 @@
 # 🛰️ HTIT-Tracker GPS Navigation System
 ### *The Ultimate Personal GPS Navigation Device for Beginners*
 
-<div align="center">
-
 ![HTIT-Tracker Infographic](images/14893124-cb31-4dbd-a212-78bf407a9d9f.png)
 
 ### ⭐ **If this project helps you or could save lives, please give it a STAR!** ⭐
